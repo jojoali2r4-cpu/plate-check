@@ -7,7 +7,7 @@ st.set_page_config(page_title="فحص اللوحات السريع", layout="wide
 st.markdown("""
     <style>
     body, div, h1, h2, h3, p { text-align: right; direction: rtl; }
-    .status-box { font-size: 32px !important; font-weight: bold; text-align: center; padding: 25px; border-radius: 15px; margin-top: 15px; }
+    .status-box { font-size: 30px !important; font-weight: bold; text-align: center; padding: 20px; border-radius: 15px; margin-top: 15px; }
     .found-box { background-color: #f8d7da; color: #721c24; border: 3px solid #f5c6cb; }
     .not-found-box { background-color: #d4edda; color: #155724; border: 3px solid #c3e6cb; }
     .mic-btn { font-size: 20px; padding: 12px 24px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; }
@@ -19,12 +19,11 @@ st.markdown("""
 st.title("⚡ نظام الفحص والإملاء الفوري السريع")
 st.markdown("---")
 
-def normalize_text(text):
+def get_plate_signature(text):
     if not text:
         return ""
     text = str(text).strip()
     
-    # قاموس تحويل أسماء الحروف المنطوقة إلى أحرف مفردة
     letter_map = {
         'ألف': 'ا', 'الف': 'ا', 'باء': 'ب', 'با': 'ب', 'تاء': 'ت', 'تا': 'ت',
         'ثاء': 'ث', 'ثا': 'ث', 'جيم': 'ج', 'حاء': 'ح', 'حا': 'ح', 'خاء': 'خ', 'خا': 'خ',
@@ -35,18 +34,20 @@ def normalize_text(text):
         'واو': 'و', 'ياء': 'ي', 'يا': 'ي'
     }
     
-    # استبدال كلمات الحروف
-    for word, letter in letter_map.items():
-        text = re.sub(r'\b' + word + r'\b', letter, text)
-        
-    # تحويل الأرقام العربية الهندية (٠-٩) إلى أرقام إنجليزية (0-9)
+    # تحويل الأرقام العربية الهندية
     arabic_digits = "٠١٢٣٤٥٦٧٨٩"
     english_digits = "0123456789"
-    translation_table = str.maketrans(arabic_digits, english_digits)
-    text = text.translate(translation_table)
+    text = text.translate(str.maketrans(arabic_digits, english_digits))
     
-    # إزالة كل المسافات والرموز
-    return re.sub(r'[^a-zA-Z0-9أ-ي]', '', text)
+    words = text.split()
+    converted_words = [letter_map.get(w, w) for w in words]
+    clean_str = "".join(converted_words)
+    
+    # استخراج الحروف والأرقام بشكل مستقل
+    letters = "".join(re.findall(r'[أ-يa-zA-Z]', clean_str))
+    digits = "".join(re.findall(r'[0-9]', clean_str))
+    
+    return f"{letters}_{digits}" if (letters or digits) else ""
 
 uploaded_file = st.file_uploader("اختر ملف الإكسيل (Excel)", type=["xlsx", "xls"])
 
@@ -54,21 +55,21 @@ if uploaded_file:
     df = pd.read_excel(uploaded_file)
     column_name = st.selectbox("اختر عمود اللوحات:", df.columns)
     
-    # تنظيف قوالب اللوحات في ملف الإكسيل بنفس المعيار
     raw_plates = df[column_name].dropna().tolist()
-    normalized_map = {}
+    plate_database = {}
     
     for plate in raw_plates:
-        norm_key = normalize_text(plate)
-        if norm_key:
-            normalized_map[norm_key] = str(plate)
+        sig = get_plate_signature(plate)
+        if sig:
+            plate_database[sig] = str(plate)
 
-    st.success(f"تم تحميل الملف! عدد اللوحات: {len(normalized_map)}")
+    st.success(f"تم تحميل الملف بنجاح! عدد اللوحات المفهرسة: {len(plate_database)}")
     st.markdown("---")
 
-    st.subheader("🎙️ الاستماع الفوري المستمر:")
+    st.subheader("🎙️ الاستماع المباشر الفوري:")
 
-    plates_keys = str(list(normalized_map.keys()))
+    import json
+    db_json = json.dumps(plate_database, ensure_ascii=False)
 
     components_code = f"""
     <div style="direction: rtl; text-align: center; font-family: sans-serif;">
@@ -76,22 +77,22 @@ if uploaded_file:
         <div id="status" style="margin-top: 10px; color: #888; font-size: 14px;">الميكروفون متوقف</div>
         
         <div style="margin-top: 20px;">
-            <div style="font-size: 16px; color: #555;">اللوحة المنطوقة حالياً:</div>
-            <div id="liveText" style="font-size: 28px; font-weight: bold; color: #007bff; min-height: 40px; margin: 10px 0;">-</div>
+            <div style="font-size: 16px; color: #555;">آخر لوحة تم فحصها:</div>
+            <div id="liveText" style="font-size: 26px; font-weight: bold; color: #007bff; min-height: 40px; margin: 10px 0;">-</div>
         </div>
 
         <div id="resultBox" class="status-box" style="display:none;"></div>
     </div>
 
     <script>
-        const existingPlatesKeys = new Set({plates_keys});
+        const plateDB = {db_json};
         let recognizing = false;
         let recognition;
 
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
         if (!SpeechRecognition) {{
-            document.getElementById('status').innerText = "متصفحك لا يدعم التعرف الصوتي. استخدم Chrome على Android.";
+            document.getElementById('status').innerText = "المتصفح لا يدعم التحدث المباشر. يرجى استخدام متصفح Chrome على هاتف أندرويد.";
         }} else {{
             recognition = new SpeechRecognition();
             recognition.continuous = true;
@@ -100,7 +101,7 @@ if uploaded_file:
 
             recognition.onstart = function() {{
                 recognizing = true;
-                document.getElementById('status').innerText = "🎙️ الميكروفون يعمل الآن.. انطق اللوحات مباشرة!";
+                document.getElementById('status').innerText = "🎙️ الميكروفون يعمل.. واصل نطق اللوحات طوالي بدون توقف!";
                 document.getElementById('toggleBtn').innerText = "⏹️ إيقاف الاستماع";
                 document.getElementById('toggleBtn').className = "mic-btn stop-btn";
             }};
@@ -116,15 +117,15 @@ if uploaded_file:
             }};
 
             recognition.onresult = function(event) {{
-                let currentTranscript = '';
+                let lastPhrase = '';
+                // أخذ الجملة الأخيرة فقط لتفادي تراكم النصوص اللفظية القديمة
                 for (let i = event.resultIndex; i < event.results.length; ++i) {{
-                    currentTranscript += event.results[i][0].transcript;
+                    lastPhrase = event.results[i][0].transcript;
                 }}
 
-                if (currentTranscript.trim() !== '') {{
-                    let rawText = currentTranscript.trim();
-                    document.getElementById('liveText').innerText = rawText;
-                    checkPlate(rawText);
+                if (lastPhrase.trim() !== '') {{
+                    document.getElementById('liveText').innerText = lastPhrase;
+                    checkPlate(lastPhrase);
                 }}
             }};
         }}
@@ -138,10 +139,9 @@ if uploaded_file:
             }}
         }}
 
-        function normalizeJS(text) {{
+        function makeSignature(text) {{
             if (!text) return "";
-            let t = text.trim();
-            const letterMap = {{
+            let letterMap = {{
                 'ألف': 'ا', 'الف': 'ا', 'باء': 'ب', 'با': 'ب', 'تاء': 'ت', 'تا': 'ت',
                 'ثاء': 'ث', 'ثا': 'ث', 'جيم': 'ج', 'حاء': 'ح', 'حا': 'ح', 'خاء': 'خ', 'خا': 'خ',
                 'دال': 'د', 'ذال': 'ذ', 'راء': 'ر', 'را': 'ر', 'زاي': 'ز', 'زين': 'ز', 'زا': 'ز',
@@ -151,27 +151,26 @@ if uploaded_file:
                 'واو': 'و', 'ياء': 'ي', 'يا': 'ي'
             }};
 
-            for (let word in letterMap) {{
-                let regex = new RegExp('\\\\b' + word + '\\\\b', 'g');
-                t = t.replace(regex, letterMap[word]);
-            }}
+            // تحويل الأرقام الهندية
+            let t = text.replace(/[٠١٢٣٤٥٦٧٨٩]/g, function(d) {{ return d.charCodeAt(0) - 1632; }});
+            
+            let words = t.trim().split(/\\s+/);
+            let converted = words.map(w => letterMap[w] || w).join("");
 
-            t = t.replace(/[٠١٢٣٤٥٦٧٨٩]/g, function(d) {{
-                return d.charCodeAt(0) - 1632;
-            }});
+            let letters = (converted.match(/[أ-يa-zA-Z]/g) || []).join("");
+            let digits = (converted.match(/[0-9]/g) || []).join("");
 
-            return t.replace(/[^a-zA-Z0-9أ-ي]/g, '');
+            return letters + "_" + digits;
         }}
 
-        function checkPlate(fullText) {{
-            let norm = normalizeJS(fullText);
+        function checkPlate(phrase) {{
+            let sig = makeSignature(phrase);
             let resultBox = document.getElementById('resultBox');
-
             resultBox.style.display = 'block';
 
-            if (existingPlatesKeys.has(norm)) {{
+            if (sig && plateDB[sig]) {{
                 resultBox.className = 'status-box found-box';
-                resultBox.innerHTML = '⚠️ اللوحة موجودة في الملف!';
+                resultBox.innerHTML = '⚠️ اللوحة موجودة بالملف: (' + plateDB[sig] + ')';
                 
                 if ("vibrate" in navigator) {{ navigator.vibrate([300, 100, 300]); }}
                 playBeep();
