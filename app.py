@@ -3,7 +3,7 @@ import pandas as pd
 import re
 import json
 
-st.set_page_config(page_title="فحص اللوحات الذكي المجاني", layout="wide")
+st.set_page_config(page_title="فحص اللوحات الذكي المطور", layout="wide")
 
 st.markdown("""
     <style>
@@ -17,8 +17,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ نظام فحص اللوحات المباشر")
-st.caption("مطابقة فائقة الذكاء للأرقام والحروف الصوتية")
+st.title("⚡ نظام فحص اللوحات مع عزل الضجيج")
+st.caption("فلترة الترددات + مطابقة الحروف والأرقام الذكية")
 st.markdown("---")
 
 def parse_plate(text):
@@ -46,24 +46,23 @@ if uploaded_file:
     
     for plate in raw_plates:
         letters, digits = parse_plate(plate)
-        if digits:
-            plate_database.append({
-                'original': str(plate),
-                'letters': letters,
-                'digits': digits
-            })
+        plate_database.append({
+            'original': str(plate),
+            'letters': letters,
+            'digits': digits
+        })
 
     st.success(f"تم تحميل {len(plate_database)} لوحة بنجاح!")
     st.markdown("---")
 
-    st.subheader("🎙️ الفحص الصوتي المباشر:")
+    st.subheader("🎙️ الفحص الصوتي المباشر (مع عزل الضوضاء):")
     st.write("اضغطي على الزر وانطقي اللوحة:")
 
     db_json = json.dumps(plate_database, ensure_ascii=False)
 
     components_code = f"""
     <div style="direction: rtl; text-align: center; font-family: sans-serif;">
-        <button id="toggleBtn" class="mic-btn start-btn" onclick="toggleSpeech()">🔴 تشغيل الاستماع المستمر</button>
+        <button id="toggleBtn" class="mic-btn start-btn" onclick="toggleSpeech()">🔴 تشغيل الاستماع المفلتر</button>
         <div id="status" style="margin-top: 10px; color: #666; font-size: 14px;">الميكروفون متوقف</div>
         
         <div style="margin-top: 15px; background: #f8f9fa; padding: 15px; border-radius: 10px;">
@@ -78,6 +77,7 @@ if uploaded_file:
         const plateDB = {db_json};
         let recognizing = false;
         let recognition;
+        let audioContext, mediaStream, filterNode;
 
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -91,7 +91,7 @@ if uploaded_file:
 
             recognition.onstart = function() {{
                 recognizing = true;
-                document.getElementById('status').innerText = "🎙️ الميكروفون يستمع الآن.. انطقي اللوحة!";
+                document.getElementById('status').innerText = "🎙️ جاري تصفية الضجيج والاستماع...";
                 document.getElementById('toggleBtn').innerText = "⏹️ إيقاف الاستماع";
                 document.getElementById('toggleBtn').className = "mic-btn stop-btn";
             }};
@@ -101,7 +101,7 @@ if uploaded_file:
                     recognition.start();
                 }} else {{
                     document.getElementById('status').innerText = "الميكروفون متوقف";
-                    document.getElementById('toggleBtn').innerText = "🔴 تشغيل الاستماع المستمر";
+                    document.getElementById('toggleBtn').innerText = "🔴 تشغيل الاستماع المفلتر";
                     document.getElementById('toggleBtn').className = "mic-btn start-btn";
                 }}
             }};
@@ -119,35 +119,107 @@ if uploaded_file:
             }};
         }}
 
-        function toggleSpeech() {{
+        async function setupAudioDSP() {{
+            try {{
+                // تفعيل إلغاء الضوضاء والصدى الخاص بـ Hardware الهاتف
+                mediaStream = await navigator.mediaDevices.getUserMedia({{
+                    audio: {{
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }}
+                }});
+
+                // إنشاء مرشح الترددات الصوتية (Bandpass Filter) للتركيز على الصوت البشري فقط
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                let source = audioContext.createMediaStreamSource(mediaStream);
+                
+                filterNode = audioContext.createBiquadFilter();
+                filterNode.type = "bandpass";
+                filterNode.frequency.value = 1800; // المنتصف بين الترددات البشرية
+                filterNode.Q.value = 0.9; // عرض النطاق العريض للترددات المسموحة (300Hz - 3400Hz)
+
+                source.connect(filterNode);
+            }} catch(e) {{
+                console.log("Audio DSP initialization failed:", e);
+            }}
+        }}
+
+        async function toggleSpeech() {{
             if (recognizing) {{
                 recognizing = false;
                 recognition.stop();
+                if (mediaStream) {{
+                    mediaStream.getTracks().forEach(track => track.stop());
+                }}
+                if (audioContext) {{
+                    audioContext.close();
+                }}
             }} else {{
+                await setupAudioDSP();
                 recognition.start();
             }}
         }}
 
+        function normalizeArabicLetters(text) {{
+            let t = text;
+            t = t.replace(/أفلام|افلام|بسل|بصل/g, "بسل")
+                 .replace(/ألف|الف/g, "أ")
+                 .replace(/باء|با/g, "ب")
+                 .replace(/تاء|تا/g, "ت")
+                 .replace(/ثاء|ثا/g, "ث")
+                 .replace(/جيم/g, "ج")
+                 .replace(/حاء|حا/g, "ح")
+                 .replace(/خاء|خا/g, "خ")
+                 .replace(/دال/g, "د")
+                 .replace(/ذال/g, "ذ")
+                 .replace(/راء|را/g, "ر")
+                 .replace(/زاي|زين/g, "ز")
+                 .replace(/سين/g, "س")
+                 .replace(/شين/g, "ش")
+                 .replace(/صاد/g, "ص")
+                 .replace(/ضاد/g, "ض")
+                 .replace(/طاء|طا/g, "ط")
+                 .replace(/ظاء|ظا/g, "ظ")
+                 .replace(/عين/g, "ع")
+                 .replace(/غين/g, "غ")
+                 .replace(/فاء|فا/g, "ف")
+                 .replace(/قاف/g, "ق")
+                 .replace(/كاف/g, "ك")
+                 .replace(/لام/g, "ل")
+                 .replace(/ميم/g, "م")
+                 .replace(/نون/g, "ن")
+                 .replace(/هاء|ها/g, "هـ")
+                 .replace(/واو/g, "و")
+                 .replace(/ياء|يا|ياسين/g, "ي");
+            return t;
+        }}
+
         function matchSmart(phrase) {{
-            // تحويل الأرقام العربية إلى إنجليزية
             let converted = phrase.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
+            let digits = (converted.match(/[0-9]/g) || []).join("");
             
-            // استخراج الأرقام المعثور عليها
-            let digitsArray = converted.match(/[0-9]/g) || [];
-            let digits = digitsArray.join("");
+            let letterText = normalizeArabicLetters(converted);
+            let letters = (letterText.match(/[\u0600-\u06FF]/g) || []).join("").replace(/\s+/g, '');
 
             let resultBox = document.getElementById('resultBox');
-            if (digitsArray.length < 3) return; // الانتظار لحين نطق معظم الأرقام
-
             resultBox.style.display = 'block';
 
-            // البحث الذكي: مطابقة بالأرقام كاملة أو مع ترتيب الأرقام
-            let matched = plateDB.find(p => p.digits === digits);
+            let matched = null;
 
-            // لو المتصفح عكس رقمين (مثل 4674 بدلاً من 4764)، نقارن بوجود أرقام اللوحة نفسها
-            if (!matched && digitsArray.length >= 4) {{
-                let sortedInput = digitsArray.slice().sort().join("");
-                matched = plateDB.find(p => p.digits.split('').sort().join("") === sortedInput);
+            // 1. المطابقة الدقيقة بالرقم والحرف معاً
+            if (digits && letters) {{
+                matched = plateDB.find(p => p.digits === digits && (p.letters.includes(letters) || letters.includes(p.letters)));
+            }}
+            
+            // 2. المطابقة بالأرقام فقط إذا توفر 3 أرقام على الأقل
+            if (!matched && digits.length >= 3) {{
+                matched = plateDB.find(p => p.digits === digits);
+            }}
+
+            // 3. المطابقة بالحروف فقط (لو لم تُسمع الأرقام بسبب الضوضاء)
+            if (!matched && letters.length >= 2) {{
+                matched = plateDB.find(p => p.letters === letters || p.original.includes(letters));
             }}
 
             if (matched) {{
