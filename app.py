@@ -11,14 +11,15 @@ st.markdown("""
     .status-box { font-size: 26px !important; font-weight: bold; text-align: center; padding: 18px; border-radius: 12px; margin-top: 15px; }
     .found-box { background-color: #f8d7da; color: #721c24; border: 3px solid #f5c6cb; }
     .not-found-box { background-color: #d4edda; color: #155724; border: 3px solid #c3e6cb; }
-    .mic-btn { font-size: 18px; padding: 12px 24px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; width: 100%; }
+    .mic-btn { font-size: 18px; padding: 12px 24px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; margin: 5px; width: 48%; }
     .start-btn { background-color: #28a745; color: white; }
     .stop-btn { background-color: #dc3545; color: white; }
+    .clear-btn { background-color: #6c757d; color: white; }
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ نظام فحص اللوحات الفوري (المطابقة الضبابية المرنة)")
-st.caption("مطابقة فائقة الذكاء تتعامل مع تبديل الأرقام والنطق المتقطع")
+st.title("⚡ نظام فحص اللوحات الفوري")
+st.caption("الاستماع الدقيق للجملة الأخيرة فقط لمنع التكرار")
 st.markdown("---")
 
 def parse_plate(text):
@@ -63,6 +64,8 @@ if uploaded_file:
     components_code = f"""
     <div style="direction: rtl; text-align: center; font-family: sans-serif;">
         <button id="toggleBtn" class="mic-btn start-btn" onclick="toggleSpeech()">🔴 تشغيل الاستماع</button>
+        <button id="clearBtn" class="mic-btn clear-btn" onclick="clearText()">🗑️ مسح النص</button>
+        
         <div id="status" style="margin-top: 10px; color: #666; font-size: 14px;">الميكروفون متوقف</div>
         
         <div style="margin-top: 15px; background: #f8f9fa; padding: 15px; border-radius: 10px;">
@@ -85,7 +88,7 @@ if uploaded_file:
         }} else {{
             recognition = new SpeechRecognition();
             recognition.continuous = true;
-            recognition.interimResults = true;
+            recognition.interimResults = false;
             recognition.lang = 'ar-SA';
 
             recognition.onstart = function() {{
@@ -96,7 +99,7 @@ if uploaded_file:
             }};
 
             recognition.onerror = function(event) {{
-                console.log("Speech Recognition Error: ", event.error);
+                console.log("Speech Error: ", event.error);
             }};
 
             recognition.onend = function() {{
@@ -110,14 +113,12 @@ if uploaded_file:
             }};
 
             recognition.onresult = function(event) {{
-                let fullTranscript = '';
-                for (let i = 0; i < event.results.length; ++i) {{
-                    fullTranscript += event.results[i][0].transcript + ' ';
-                }}
+                let lastIndex = event.results.length - 1;
+                let text = event.results[lastIndex][0].transcript.trim();
 
-                if (fullTranscript.trim() !== '') {{
-                    document.getElementById('liveText').innerText = fullTranscript;
-                    matchFuzzy(fullTranscript);
+                if (text !== "") {{
+                    document.getElementById('liveText').innerText = text;
+                    matchFuzzy(text);
                 }}
             }};
         }}
@@ -133,6 +134,12 @@ if uploaded_file:
                     console.log(e);
                 }}
             }}
+        }}
+
+        function clearText() {{
+            document.getElementById('liveText').innerText = "-";
+            let resultBox = document.getElementById('resultBox');
+            resultBox.style.display = 'none';
         }}
 
         function normalizeArabicLetters(text) {{
@@ -170,9 +177,7 @@ if uploaded_file:
         }}
 
         function matchFuzzy(phrase) {{
-            let converted = phrase.replace(/[٠-٩]/g, d => "٠١٢٣٥٦٧٨٩".indexOf(d));
-            
-            // استخراج الأرقام وحدها والحروف وحدها
+            let converted = phrase.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
             let inputDigits = (converted.match(/[0-9]/g) || []).join("");
             let normalizedText = normalizeArabicLetters(converted);
             let inputLetters = (normalizedText.match(/[\u0600-\u06FF]/g) || []).join("").replace(/\s+/g, '');
@@ -182,21 +187,17 @@ if uploaded_file:
 
             let matched = null;
 
-            // مطابقة قائمة على وجود كل الأرقام بغض النظر عن ترتيبها المتقطع + الحروف
             plateDB.forEach(p => {{
                 let lettersMatch = false;
                 let digitsMatch = false;
 
-                // مطابقة الحروف (سواء باء سين لام -> بسل)
-                if (inputLetters && p.letters && (inputLetters.includes(p.letters) || p.letters.includes(inputLetters))) {{
+                if (!inputLetters || (p.letters && (inputLetters.includes(p.letters) || p.letters.includes(inputLetters)))) {{
                     lettersMatch = true;
                 }}
 
-                // مطابقة مجموعة الأرقام (حتى لو وصلت 4 6 7 4 مطابقة لـ 4764)
                 if (inputDigits && p.digits) {{
                     let sortedInput = inputDigits.split('').sort().join('');
                     let sortedTarget = p.digits.split('').sort().join('');
-                    
                     if (sortedInput === sortedTarget || inputDigits.includes(p.digits) || p.digits.includes(inputDigits)) {{
                         digitsMatch = true;
                     }}
@@ -232,4 +233,4 @@ if uploaded_file:
     </script>
     """
 
-    st.components.v1.html(components_code, height=350)
+    st.components.v1.html(components_code, height=380)
