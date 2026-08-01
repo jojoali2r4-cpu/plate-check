@@ -17,7 +17,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ نظام فحص اللوحات (حروف مطابقة تماماً + أرقام مبدلة)")
+st.title("⚡ نظام فحص اللوحات (النسخة المرنة الفائقة)")
 st.markdown("---")
 
 def parse_plate(text):
@@ -70,7 +70,7 @@ if uploaded_file:
         </div>
 
         <div id="resultBox" class="status-box" style="display:none;">
-            <div style="font-weight: bold; margin-bottom: 8px; color: #111;">اللوحات المطابقة (حروف متطابقة + أرقام مبدلة):</div>
+            <div style="font-weight: bold; margin-bottom: 8px; color: #111;">اللوحات المطابقة (حروف متقاربة + أرقام مبدلة):</div>
             <div id="platesList"></div>
         </div>
     </div>
@@ -126,7 +126,7 @@ if uploaded_file:
                 let currentText = finalTranscript || interimTranscript;
                 if (currentText.trim() !== "") {{
                     document.getElementById('liveText').innerText = currentText;
-                    findExactLettersSwappedDigits(currentText);
+                    findFlexibleMatch(currentText);
                 }}
             }};
         }}
@@ -150,7 +150,7 @@ if uploaded_file:
             resultBox.style.display = 'none';
         }}
 
-        function findExactLettersSwappedDigits(phrase) {{
+        function findFlexibleMatch(phrase) {{
             let t = phrase;
             
             // تحويل الأرقام العربية الهندية إلى إنجليزية
@@ -168,14 +168,14 @@ if uploaded_file:
                  .replace(/تمانية|ثمانية|ثامنه|تمنيه|ثمان/g, "8")
                  .replace(/تسعة|تسعه|تسع/g, "9");
 
-            // توحيد الحروف المنطوقة
+            // توحيد الحروف مهما كتبها المتصفح بمسافات (مثل: باسل، با صل، باسل لام)
             t = t.replace(/بسلام|باسلام|بصل|باسيل|بأسين|باسين|باء سين|با سين|باء سين لام|باسين لام|بس ل|افلام|أفلام/g, "بسل");
 
             // استخراج الأرقام وترتيبها (لتجاوز تبديل الخانات)
             let inputDigitsSorted = (t.match(/[0-9]/g) || []).sort().join("");
             
-            // استخراج الحروف بدقة ونقاء تام (بدون حذف حروف المد أو التغيير العشوائي)
-            let inputLetters = (t.match(/[\\u0600-\\u06FF]/g) || []).join("").replace(/\\s+/g, '');
+            // استخراج الحروف وإزالة المسافات وحروف المد تماماً لضمان المطابقة المطلقة
+            let inputLetters = (t.match(/[\\u0600-\\u06FF]/g) || []).join("").replace(/\\s+/g, '').replace(/[اأإآىيؤئةو]/g, '');
 
             let resultBox = document.getElementById('resultBox');
             let platesListDiv = document.getElementById('platesList');
@@ -185,10 +185,10 @@ if uploaded_file:
 
             plateDB.forEach(p => {{
                 let targetDigitsSorted = p.digits ? p.digits.split('').sort().join('') : "";
-                let cleanTargetLetters = p.letters ? p.letters.replace(/\\s+/g, '') : "";
+                let cleanTargetLetters = p.letters ? p.letters.replace(/\\s+/g, '').replace(/[اأإآىيؤئةو]/g, '') : "";
 
-                // الشرط الصارم: تطابق الحروف تماماً + نفس الأرقام حتى لو كانت مبدلة
-                let lettersMatch = (inputLetters === cleanTargetLetters);
+                // المطابقة الفائقة: حروف متطابقة (بدون مسافات أو مدود) + أرقام مبدلة أو صحيحة
+                let lettersMatch = (inputLetters !== "" && cleanTargetLetters.includes(inputLetters)) || (inputLetters.includes(cleanTargetLetters));
                 let digitsMatch = (inputDigitsSorted !== "" && inputDigitsSorted === targetDigitsSorted);
 
                 if (lettersMatch && digitsMatch) {{
@@ -202,7 +202,7 @@ if uploaded_file:
 
             resultBox.style.display = 'block';
             if (matchedCount === 0) {{
-                platesListDiv.innerHTML = '<div style="color: #dc3545; font-weight: bold;">❌ لا توجد لوحة مطابقة تماماً (الحروف يجب أن تتطابق والأرقام تكون نفسها مبدلة).</div>';
+                platesListDiv.innerHTML = '<div style="color: #dc3545; font-weight: bold;">❌ لا توجد لوحة مطابقة. (حاول النطق بوضوح وثبات).</div>';
             }} else {{
                 if ("vibrate" in navigator) {{ navigator.vibrate(200); }}
             }}
