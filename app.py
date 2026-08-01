@@ -3,7 +3,7 @@ import pandas as pd
 import re
 import json
 
-st.set_page_config(page_title="فحص اللوحات الذكي", layout="wide")
+st.set_page_config(page_title="فحص اللوحات السريع", layout="wide")
 
 st.markdown("""
     <style>
@@ -18,7 +18,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ نظام فحص اللوحات الدقيق")
+st.title("⚡ نظام فحص اللوحات الفوري (النسخة السريعة جداً)")
 st.markdown("---")
 
 def parse_plate(text):
@@ -53,8 +53,8 @@ if uploaded_file:
     st.success(f"تم تحميل {len(plate_database)} لوحة بنجاح!")
     st.markdown("---")
 
-    st.subheader("🎙️ الفحص الصوتي المباشر:")
-    st.write("اضغطي على الزر وانطقي اللوحة:")
+    st.subheader("🎙️ الفحص الصوتي الفوري:")
+    st.write("اضغطي على زر التشغيل وانطقي اللوحة مباشرة:")
 
     db_json = json.dumps(plate_database, ensure_ascii=False)
 
@@ -66,8 +66,8 @@ if uploaded_file:
         <div id="status" style="margin-top: 10px; color: #666; font-size: 14px;">الميكروفون متوقف</div>
         
         <div style="margin-top: 15px; background: #f8f9fa; padding: 15px; border-radius: 10px;">
-            <div style="font-size: 14px; color: #555;">النص الملتقط:</div>
-            <div id="liveText" style="font-size: 24px; font-weight: bold; color: #007bff; min-height: 35px;">-</div>
+            <div style="font-size: 14px; color: #555;">النص الملتقط لحظياً:</div>
+            <div id="liveText" style="font-size: 26px; font-weight: bold; color: #007bff; min-height: 35px;">-</div>
         </div>
 
         <div id="resultBox" class="status-box" style="display:none;"></div>
@@ -81,16 +81,16 @@ if uploaded_file:
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
         if (!SpeechRecognition) {{
-            document.getElementById('status').innerText = "المتصفح لا يدعم التحدث الصوتي المباشر.";
+            document.getElementById('status').innerText = "المتصفح لا يدعم التحدث الصوتي.";
         }} else {{
             recognition = new SpeechRecognition();
             recognition.continuous = true;
-            recognition.interimResults = false;
+            recognition.interimResults = true;  /* تفعيل القراءة الفورية لسرعة الاستجابة */
             recognition.lang = 'ar-SA';
 
             recognition.onstart = function() {{
                 recognizing = true;
-                document.getElementById('status').innerText = "🎙️ يستمع الآن.. انطقي اللوحة!";
+                document.getElementById('status').innerText = "🎙️ يستمع الآن.. انطقي بسرعة!";
                 document.getElementById('toggleBtn').innerText = "⏹️ إيقاف الاستماع";
                 document.getElementById('toggleBtn').className = "mic-btn stop-btn";
             }};
@@ -110,12 +110,21 @@ if uploaded_file:
             }};
 
             recognition.onresult = function(event) {{
-                let lastIndex = event.results.length - 1;
-                let text = event.results[lastIndex][0].transcript.trim();
+                let interimTranscript = '';
+                let finalTranscript = '';
 
-                if (text !== "") {{
-                    document.getElementById('liveText').innerText = text;
-                    matchPlate(text);
+                for (let i = event.resultIndex; i < event.results.length; ++i) {{
+                    if (event.results[i].isFinal) {{
+                        finalTranscript += event.results[i][0].transcript;
+                    }} else {{
+                        interimTranscript += event.results[i][0].transcript;
+                    }}
+                }}
+
+                let currentText = finalTranscript || interimTranscript;
+                if (currentText.trim() !== "") {{
+                    document.getElementById('liveText').innerText = currentText;
+                    matchFast(currentText);
                 }}
             }};
         }}
@@ -139,14 +148,17 @@ if uploaded_file:
             resultBox.style.display = 'none';
         }}
 
-        function matchPlate(phrase) {{
-            let converted = phrase.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
+        function matchFast(phrase) {{
+            let t = phrase;
             
-            // استخراج الأرقام كما نُطقت تماماً دون أي تغيير أو تبديل في الترتيب
-            let inputDigits = (converted.match(/[0-9]/g) || []).join("");
+            // تحويل الأرقام العربية الهندية إلى إنجليزية
+            t = t.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
             
-            // استخراج الحروف وإزالة المسافات (مثال: "ب س ل" تصبح "بسل")
-            let inputLetters = (converted.match(/[\\u0600-\\u06FF]/g) || []).join("").replace(/\\s+/g, '');
+            // تصحيح الأخطاء الشائعة للمتصفح (مثل تحويل "افلام" أو "بصل" إلى "بسل")
+            t = t.replace(/افلام|أفلام|بصل|بس ل/g, "بسل");
+
+            let inputDigits = (t.match(/[0-9]/g) || []).join("");
+            let inputLetters = (t.match(/[\\u0600-\\u06FF]/g) || []).join("").replace(/\\s+/g, '');
 
             let resultBox = document.getElementById('resultBox');
             resultBox.style.display = 'block';
@@ -154,8 +166,28 @@ if uploaded_file:
             let matched = null;
 
             plateDB.forEach(p => {{
-                // مطابقة دقيقة وصارمة للأرقام والحروف معاً
-                if (p.digits === inputDigits && p.letters === inputLetters) {{
+                let digitsMatch = false;
+                let lettersMatch = false;
+
+                // مطابقة الأرقام (تتجاوز تبديل الأرقام مثل 4674 و 4764)
+                if (inputDigits && p.digits) {{
+                    let sortedInput = inputDigits.split('').sort().join('');
+                    let sortedTarget = p.digits.split('').sort().join('');
+                    if (sortedInput === sortedTarget || p.digits.includes(inputDigits) || inputDigits.includes(p.digits)) {{
+                        digitsMatch = true;
+                    }}
+                }}
+
+                // مطابقة الحروف الفورية
+                if (!inputLetters || inputLetters.length === 0) {{
+                    lettersMatch = true;
+                }} else if (p.letters) {{
+                    if (p.letters.includes(inputLetters) || inputLetters.includes(p.letters) || p.letters === inputLetters) {{
+                        lettersMatch = true;
+                    }}
+                }}
+
+                if (digitsMatch && lettersMatch) {{
                     matched = p;
                 }}
             }});
