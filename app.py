@@ -18,8 +18,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ نظام فحص اللوحات الفوري (النسخة النهائية)")
-st.caption("إلغاء قيود ترتيب الأرقام ودمج الحروف المنفصلة تلقائياً")
+st.title("⚡ نظام فحص اللوحات الدقيق")
 st.markdown("---")
 
 def parse_plate(text):
@@ -116,7 +115,7 @@ if uploaded_file:
 
                 if (text !== "") {{
                     document.getElementById('liveText').innerText = text;
-                    matchFuzzy(text);
+                    matchPlate(text);
                 }}
             }};
         }}
@@ -140,15 +139,14 @@ if uploaded_file:
             resultBox.style.display = 'none';
         }}
 
-        function matchFuzzy(phrase) {{
-            // تحويل الأرقام العربية الهندية إلى إنجليزية
+        function matchPlate(phrase) {{
             let converted = phrase.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
             
-            // استخراج الأرقام وحدها وترتيبها لتلافي خطأ الترتيب أو التبديل
-            let inputDigits = (converted.match(/[0-9]/g) || []).sort().join("");
+            // استخراج الأرقام كما نُطقت تماماً دون أي تغيير أو تبديل في الترتيب
+            let inputDigits = (converted.match(/[0-9]/g) || []).join("");
             
-            // استخراج جميع الحروف العربية وإزالة كافة المسافات بينها لضمان دمجها
-            let inputLetters = (converted.match(/[\u0600-\u06FF]/g) || []).join("").replace(/\\s+/g, '');
+            // استخراج الحروف وإزالة المسافات (مثال: "ب س ل" تصبح "بسل")
+            let inputLetters = (converted.match(/[\\u0600-\\u06FF]/g) || []).join("").replace(/\\s+/g, '');
 
             let resultBox = document.getElementById('resultBox');
             resultBox.style.display = 'block';
@@ -156,40 +154,8 @@ if uploaded_file:
             let matched = null;
 
             plateDB.forEach(p => {{
-                let lettersMatch = false;
-                let digitsMatch = false;
-
-                // مطابقة الحروف المرنة (إذا كانت الحروف المنطوقة جزءاً من حروف اللوحة أو العكس)
-                if (!inputLetters || inputLetters.length === 0) {{
-                    lettersMatch = true;
-                }} else if (p.letters) {{
-                    let targetLettersSorted = p.letters.split('').sort().join('');
-                    let inputLettersSorted = inputLetters.split('').sort().join('');
-                    
-                    // إذا تقاطعت الحروف أو تداخلت
-                    if (targetLettersSorted.includes(inputLetters) || inputLetters.includes(targetLettersSorted) || targetLettersSorted === inputLetters) {{
-                        lettersMatch = true;
-                    }} else {{
-                        // مطابقة تقريبية بالحروف الفردية
-                        let matchCount = 0;
-                        for (let char of inputLetters) {{
-                            if (p.letters.includes(char)) matchCount++;
-                        }}
-                        if (matchCount >= Math.min(2, p.letters.length)) {{
-                            lettersMatch = true;
-                        }}
-                    }}
-                }}
-
-                // مطابقة الأرقام حصرياً بعد الترتيب (تتجاوز تماماً مشكلة تبديل الخانات مثل 4674 و 4764)
-                if (inputDigits && p.digits) {{
-                    let targetDigitsSorted = p.digits.split('').sort().join('');
-                    if (inputDigits === targetDigitsSorted || p.digits.includes(inputDigits) || inputDigits.includes(targetDigitsSorted)) {{
-                        digitsMatch = true;
-                    }}
-                }}
-
-                if (lettersMatch && digitsMatch) {{
+                // مطابقة دقيقة وصارمة للأرقام والحروف معاً
+                if (p.digits === inputDigits && p.letters === inputLetters) {{
                     matched = p;
                 }}
             }});
