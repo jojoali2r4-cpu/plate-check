@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import re
+import json
 
 st.set_page_config(page_title="فحص اللوحات السريع", layout="wide")
 
@@ -19,22 +20,22 @@ st.markdown("""
 st.title("⚡ نظام الفحص والإملاء الفوري السريع")
 st.markdown("---")
 
-def get_plate_signature(text):
+def extract_digits_and_letters(text):
     if not text:
-        return ""
+        return "", ""
     text = str(text).strip()
     
     letter_map = {
         'ألف': 'ا', 'الف': 'ا', 'باء': 'ب', 'با': 'ب', 'تاء': 'ت', 'تا': 'ت',
         'ثاء': 'ث', 'ثا': 'ث', 'جيم': 'ج', 'حاء': 'ح', 'حا': 'ح', 'خاء': 'خ', 'خا': 'خ',
         'دال': 'د', 'ذال': 'ذ', 'راء': 'ر', 'را': 'ر', 'زاي': 'ز', 'زين': 'ز', 'زا': 'ز',
-        'سين': 'س', 'شين': 'ش', 'صاد': 'ص', 'ضاد': 'ض', 'طاء': 'ط', 'طا': 'ط',
-        'ظاء': 'ظ', 'ظا': 'ظ', 'عين': 'ع', 'غين': 'غ', 'فاء': 'ف', 'فا': 'ف',
-        'قاف': 'ق', 'كاف': 'ك', 'لام': 'ل', 'ميم': 'م', 'نون': 'ن', 'هاء': 'ه', 'ها': 'ه',
-        'واو': 'و', 'ياء': 'ي', 'يا': 'ي'
+        'سين': 'س', 'سا': 'س', 'شين': 'ش', 'شا': 'ش', 'صاد': 'ص', 'صا': 'ص',
+        'ضاد': 'ض', 'ضا': 'ض', 'طاء': 'ط', 'طا': 'ط', 'ظاء': 'ظ', 'ظا': 'ظ',
+        'عين': 'ع', 'غين': 'غ', 'فاء': 'ف', 'فا': 'ف', 'قاف': 'ق', 'قا': 'ق',
+        'كاف': 'ك', 'كا': 'ك', 'لام': 'ل', 'لا': 'ل', 'ميم': 'م', 'نون': 'ن',
+        'هاء': 'ه', 'ها': 'ه', 'واو': 'و', 'ياء': 'ي', 'يا': 'ي'
     }
     
-    # تحويل الأرقام العربية الهندية
     arabic_digits = "٠١٢٣٤٥٦٧٨٩"
     english_digits = "0123456789"
     text = text.translate(str.maketrans(arabic_digits, english_digits))
@@ -43,11 +44,10 @@ def get_plate_signature(text):
     converted_words = [letter_map.get(w, w) for w in words]
     clean_str = "".join(converted_words)
     
-    # استخراج الحروف والأرقام بشكل مستقل
     letters = "".join(re.findall(r'[أ-يa-zA-Z]', clean_str))
     digits = "".join(re.findall(r'[0-9]', clean_str))
     
-    return f"{letters}_{digits}" if (letters or digits) else ""
+    return letters, digits
 
 uploaded_file = st.file_uploader("اختر ملف الإكسيل (Excel)", type=["xlsx", "xls"])
 
@@ -56,19 +56,22 @@ if uploaded_file:
     column_name = st.selectbox("اختر عمود اللوحات:", df.columns)
     
     raw_plates = df[column_name].dropna().tolist()
-    plate_database = {}
+    plate_database = []
     
     for plate in raw_plates:
-        sig = get_plate_signature(plate)
-        if sig:
-            plate_database[sig] = str(plate)
+        letters, digits = extract_digits_and_letters(plate)
+        if letters or digits:
+            plate_database.append({
+                'original': str(plate),
+                'letters': letters,
+                'digits': digits
+            })
 
-    st.success(f"تم تحميل الملف بنجاح! عدد اللوحات المفهرسة: {len(plate_database)}")
+    st.success(f"تم تحميل الملف بنجاح! عدد اللوحات: {len(plate_database)}")
     st.markdown("---")
 
     st.subheader("🎙️ الاستماع المباشر الفوري:")
 
-    import json
     db_json = json.dumps(plate_database, ensure_ascii=False)
 
     components_code = f"""
@@ -77,7 +80,7 @@ if uploaded_file:
         <div id="status" style="margin-top: 10px; color: #888; font-size: 14px;">الميكروفون متوقف</div>
         
         <div style="margin-top: 20px;">
-            <div style="font-size: 16px; color: #555;">آخر لوحة تم فحصها:</div>
+            <div style="font-size: 16px; color: #555;">الكلمة المنطوقة حالياً:</div>
             <div id="liveText" style="font-size: 26px; font-weight: bold; color: #007bff; min-height: 40px; margin: 10px 0;">-</div>
         </div>
 
@@ -92,7 +95,7 @@ if uploaded_file:
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
         if (!SpeechRecognition) {{
-            document.getElementById('status').innerText = "المتصفح لا يدعم التحدث المباشر. يرجى استخدام متصفح Chrome على هاتف أندرويد.";
+            document.getElementById('status').innerText = "المتصفح لا يدعم التحدث المباشر. استخدم Chrome على أندرويد.";
         }} else {{
             recognition = new SpeechRecognition();
             recognition.continuous = true;
@@ -101,7 +104,7 @@ if uploaded_file:
 
             recognition.onstart = function() {{
                 recognizing = true;
-                document.getElementById('status').innerText = "🎙️ الميكروفون يعمل.. واصل نطق اللوحات طوالي بدون توقف!";
+                document.getElementById('status').innerText = "🎙️ الميكروفون يعمل.. انطق اللوحات طوالي!";
                 document.getElementById('toggleBtn').innerText = "⏹️ إيقاف الاستماع";
                 document.getElementById('toggleBtn').className = "mic-btn stop-btn";
             }};
@@ -118,7 +121,6 @@ if uploaded_file:
 
             recognition.onresult = function(event) {{
                 let lastPhrase = '';
-                // أخذ الجملة الأخيرة فقط لتفادي تراكم النصوص اللفظية القديمة
                 for (let i = event.resultIndex; i < event.results.length; ++i) {{
                     lastPhrase = event.results[i][0].transcript;
                 }}
@@ -139,38 +141,52 @@ if uploaded_file:
             }}
         }}
 
-        function makeSignature(text) {{
-            if (!text) return "";
+        function parseSpoken(text) {{
+            if (!text) return {{ letters: "", digits: "" }};
             let letterMap = {{
                 'ألف': 'ا', 'الف': 'ا', 'باء': 'ب', 'با': 'ب', 'تاء': 'ت', 'تا': 'ت',
                 'ثاء': 'ث', 'ثا': 'ث', 'جيم': 'ج', 'حاء': 'ح', 'حا': 'ح', 'خاء': 'خ', 'خا': 'خ',
                 'دال': 'د', 'ذال': 'ذ', 'راء': 'ر', 'را': 'ر', 'زاي': 'ز', 'زين': 'ز', 'زا': 'ز',
-                'سين': 'س', 'شين': 'ش', 'صاد': 'ص', 'ضاد': 'ض', 'طاء': 'ط', 'طا': 'ط',
-                'ظاء': 'ظ', 'ظا': 'ظ', 'عين': 'ع', 'غين': 'غ', 'فاء': 'ف', 'فا': 'ف',
-                'قاف': 'ق', 'كاف': 'ك', 'لام': 'ل', 'ميم': 'م', 'نون': 'ن', 'هاء': 'ه', 'ها': 'ه',
-                'واو': 'و', 'ياء': 'ي', 'يا': 'ي'
+                'سين': 'س', 'سا': 'س', 'شين': 'ش', 'شا': 'ش', 'صاد': 'ص', 'صا': 'ص',
+                'ضاد': 'ض', 'ضا': 'ض', 'طاء': 'ط', 'طا': 'ط', 'ظاء': 'ظ', 'ظا': 'ظ',
+                'عين': 'ع', 'غين': 'غ', 'فاء': 'ف', 'فا': 'ف', 'قاف': 'ق', 'قا': 'ق',
+                'كاف': 'ك', 'كا': 'ك', 'لام': 'ل', 'لا': 'ل', 'ميم': 'م', 'نون': 'ن',
+                'هاء': 'ه', 'ها': 'ه', 'واو': 'و', 'ياء': 'ي', 'يا': 'ي'
             }};
 
-            // تحويل الأرقام الهندية
             let t = text.replace(/[٠١٢٣٤٥٦٧٨٩]/g, function(d) {{ return d.charCodeAt(0) - 1632; }});
-            
             let words = t.trim().split(/\\s+/);
             let converted = words.map(w => letterMap[w] || w).join("");
 
             let letters = (converted.match(/[أ-يa-zA-Z]/g) || []).join("");
             let digits = (converted.match(/[0-9]/g) || []).join("");
 
-            return letters + "_" + digits;
+            return {{ letters, digits }};
         }}
 
         function checkPlate(phrase) {{
-            let sig = makeSignature(phrase);
+            let spoken = parseSpoken(phrase);
             let resultBox = document.getElementById('resultBox');
             resultBox.style.display = 'block';
 
-            if (sig && plateDB[sig]) {{
+            if (!spoken.digits && !spoken.letters) return;
+
+            // مطابقة مرنة: مطابقة الأرقام + توفر الحروف
+            let match = plateDB.find(p => {{
+                if (spoken.digits && p.digits === spoken.digits) {{
+                    if (!spoken.letters || p.letters.includes(spoken.letters) || spoken.letters.includes(p.letters)) {{
+                        return true;
+                    }}
+                }}
+                if (spoken.letters && p.letters === spoken.letters && spoken.digits === p.digits) {{
+                    return true;
+                }}
+                return false;
+            }});
+
+            if (match) {{
                 resultBox.className = 'status-box found-box';
-                resultBox.innerHTML = '⚠️ اللوحة موجودة بالملف: (' + plateDB[sig] + ')';
+                resultBox.innerHTML = '⚠️ اللوحة موجودة بالملف: (' + match.original + ')';
                 
                 if ("vibrate" in navigator) {{ navigator.vibrate([300, 100, 300]); }}
                 playBeep();
