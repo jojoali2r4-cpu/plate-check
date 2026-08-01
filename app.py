@@ -3,22 +3,22 @@ import pandas as pd
 import re
 import json
 
-st.set_page_config(page_title="فحص اللوحات الذكي المطور", layout="wide")
+st.set_page_config(page_title="فحص اللوحات الذكي", layout="wide")
 
 st.markdown("""
     <style>
     body, div, h1, h2, h3, p { text-align: right; direction: rtl; }
-    .status-box { font-size: 28px !important; font-weight: bold; text-align: center; padding: 20px; border-radius: 15px; margin-top: 15px; }
+    .status-box { font-size: 26px !important; font-weight: bold; text-align: center; padding: 18px; border-radius: 12px; margin-top: 15px; }
     .found-box { background-color: #f8d7da; color: #721c24; border: 3px solid #f5c6cb; }
     .not-found-box { background-color: #d4edda; color: #155724; border: 3px solid #c3e6cb; }
-    .mic-btn { font-size: 20px; padding: 12px 24px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; width: 100%; }
+    .mic-btn { font-size: 18px; padding: 12px 24px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; width: 100%; }
     .start-btn { background-color: #28a745; color: white; }
     .stop-btn { background-color: #dc3545; color: white; }
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ نظام فحص اللوحات مع عزل الضجيج")
-st.caption("فلترة الترددات + مطابقة الحروف والأرقام الذكية")
+st.title("⚡ نظام فحص اللوحات الفوري")
+st.caption("التعرف الصوتي السريع والمطابقة الذكية")
 st.markdown("---")
 
 def parse_plate(text):
@@ -55,14 +55,14 @@ if uploaded_file:
     st.success(f"تم تحميل {len(plate_database)} لوحة بنجاح!")
     st.markdown("---")
 
-    st.subheader("🎙️ الفحص الصوتي المباشر (مع عزل الضوضاء):")
+    st.subheader("🎙️ الفحص الصوتي المباشر:")
     st.write("اضغطي على الزر وانطقي اللوحة:")
 
     db_json = json.dumps(plate_database, ensure_ascii=False)
 
     components_code = f"""
     <div style="direction: rtl; text-align: center; font-family: sans-serif;">
-        <button id="toggleBtn" class="mic-btn start-btn" onclick="toggleSpeech()">🔴 تشغيل الاستماع المفلتر</button>
+        <button id="toggleBtn" class="mic-btn start-btn" onclick="toggleSpeech()">🔴 تشغيل الاستماع</button>
         <div id="status" style="margin-top: 10px; color: #666; font-size: 14px;">الميكروفون متوقف</div>
         
         <div style="margin-top: 15px; background: #f8f9fa; padding: 15px; border-radius: 10px;">
@@ -77,7 +77,6 @@ if uploaded_file:
         const plateDB = {db_json};
         let recognizing = false;
         let recognition;
-        let audioContext, mediaStream, filterNode;
 
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -91,79 +90,57 @@ if uploaded_file:
 
             recognition.onstart = function() {{
                 recognizing = true;
-                document.getElementById('status').innerText = "🎙️ جاري تصفية الضجيج والاستماع...";
+                document.getElementById('status').innerText = "🎙️ يستمع الآن.. انطقي اللوحة!";
                 document.getElementById('toggleBtn').innerText = "⏹️ إيقاف الاستماع";
                 document.getElementById('toggleBtn').className = "mic-btn stop-btn";
             }};
 
+            recognition.onerror = function(event) {{
+                console.log("Speech Recognition Error: ", event.error);
+                if (event.error === 'no-speech') {{
+                    document.getElementById('status').innerText = "لم يتم التقاط صوت، يرجى التحدث بوضوح...";
+                }}
+            }};
+
             recognition.onend = function() {{
                 if (recognizing) {{
-                    recognition.start();
+                    try {{ recognition.start(); }} catch(e) {{}}
                 }} else {{
                     document.getElementById('status').innerText = "الميكروفون متوقف";
-                    document.getElementById('toggleBtn').innerText = "🔴 تشغيل الاستماع المفلتر";
+                    document.getElementById('toggleBtn').innerText = "🔴 تشغيل الاستماع";
                     document.getElementById('toggleBtn').className = "mic-btn start-btn";
                 }}
             }};
 
             recognition.onresult = function(event) {{
-                let lastPhrase = '';
+                let fullTranscript = '';
                 for (let i = event.resultIndex; i < event.results.length; ++i) {{
-                    lastPhrase = event.results[i][0].transcript;
+                    fullTranscript += event.results[i][0].transcript;
                 }}
 
-                if (lastPhrase.trim() !== '') {{
-                    document.getElementById('liveText').innerText = lastPhrase;
-                    matchSmart(lastPhrase);
+                if (fullTranscript.trim() !== '') {{
+                    document.getElementById('liveText').innerText = fullTranscript;
+                    matchSmart(fullTranscript);
                 }}
             }};
         }}
 
-        async function setupAudioDSP() {{
-            try {{
-                // تفعيل إلغاء الضوضاء والصدى الخاص بـ Hardware الهاتف
-                mediaStream = await navigator.mediaDevices.getUserMedia({{
-                    audio: {{
-                        echoCancellation: true,
-                        noiseSuppression: true,
-                        autoGainControl: true
-                    }}
-                }});
-
-                // إنشاء مرشح الترددات الصوتية (Bandpass Filter) للتركيز على الصوت البشري فقط
-                audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                let source = audioContext.createMediaStreamSource(mediaStream);
-                
-                filterNode = audioContext.createBiquadFilter();
-                filterNode.type = "bandpass";
-                filterNode.frequency.value = 1800; // المنتصف بين الترددات البشرية
-                filterNode.Q.value = 0.9; // عرض النطاق العريض للترددات المسموحة (300Hz - 3400Hz)
-
-                source.connect(filterNode);
-            }} catch(e) {{
-                console.log("Audio DSP initialization failed:", e);
-            }}
-        }}
-
-        async function toggleSpeech() {{
+        function toggleSpeech() {{
             if (recognizing) {{
                 recognizing = false;
                 recognition.stop();
-                if (mediaStream) {{
-                    mediaStream.getTracks().forEach(track => track.stop());
-                }}
-                if (audioContext) {{
-                    audioContext.close();
-                }}
             }} else {{
-                await setupAudioDSP();
-                recognition.start();
+                try {{
+                    recognition.start();
+                }} catch(e) {{
+                    console.log(e);
+                }}
             }}
         }}
 
         function normalizeArabicLetters(text) {{
             let t = text;
-            t = t.replace(/أفلام|افلام|بسل|بصل/g, "بسل")
+            t = t.replace(/أفلام|افلام|بصل/g, "بسل")
                  .replace(/ألف|الف/g, "أ")
                  .replace(/باء|با/g, "ب")
                  .replace(/تاء|تا/g, "ت")
@@ -207,17 +184,17 @@ if uploaded_file:
 
             let matched = null;
 
-            // 1. المطابقة الدقيقة بالرقم والحرف معاً
+            // 1. البحث بالحروف والأرقام معاً
             if (digits && letters) {{
                 matched = plateDB.find(p => p.digits === digits && (p.letters.includes(letters) || letters.includes(p.letters)));
             }}
             
-            // 2. المطابقة بالأرقام فقط إذا توفر 3 أرقام على الأقل
+            // 2. البحث بالأرقام فقط إذا كانت 3 أرقام أو أكثر
             if (!matched && digits.length >= 3) {{
                 matched = plateDB.find(p => p.digits === digits);
             }}
 
-            // 3. المطابقة بالحروف فقط (لو لم تُسمع الأرقام بسبب الضوضاء)
+            // 3. البحث بالحروف فقط (مثل "بسل")
             if (!matched && letters.length >= 2) {{
                 matched = plateDB.find(p => p.letters === letters || p.original.includes(letters));
             }}
