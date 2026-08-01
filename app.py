@@ -17,8 +17,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ نظام فحص اللوحات المباشر (المطور)")
-st.caption("يعالج أخطاء المتصفح الصوتية مجاناً وبدقة فائقة")
+st.title("⚡ نظام فحص اللوحات المباشر")
+st.caption("مطابقة فائقة الذكاء للأرقام والحروف الصوتية")
 st.markdown("---")
 
 def parse_plate(text):
@@ -26,15 +26,11 @@ def parse_plate(text):
         return "", ""
     text = str(text).strip()
     
-    # تحويل الأرقام العربية إلى إنجليزية
     arabic_digits = "٠١٢٣٤٥٦٧٨٩"
     english_digits = "0123456789"
     text = text.translate(str.maketrans(arabic_digits, english_digits))
     
-    # استخراج الأرقام
     digits = "".join(re.findall(r'[0-9]', text))
-    
-    # استخراج الحروف العربية فقط
     letters = "".join(re.findall(r'[\u0600-\u06FF]', text))
     
     return letters, digits
@@ -61,7 +57,7 @@ if uploaded_file:
     st.markdown("---")
 
     st.subheader("🎙️ الفحص الصوتي المباشر:")
-    st.write("اضغطي على الزر وانطقي اللوحة مباشرة:")
+    st.write("اضغطي على الزر وانطقي اللوحة:")
 
     db_json = json.dumps(plate_database, ensure_ascii=False)
 
@@ -132,29 +128,27 @@ if uploaded_file:
             }}
         }}
 
-        function cleanText(text) {{
-            // تحويل الأخطاء الصوتية الشائعة للمتصفح إلى الحروف الأصلية
-            let t = text;
-            t = t.replace(/أفلام|افلام|بسل|بصل/g, "بسل");
-            t = t.replace(/أحلام|احلام/g, "أحل");
-            t = t.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
-            return t;
-        }}
-
         function matchSmart(phrase) {{
-            let cleaned = cleanText(phrase);
+            // تحويل الأرقام العربية إلى إنجليزية
+            let converted = phrase.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
             
-            // استخراج الأرقام فقط
-            let digits = (cleaned.match(/[0-9]/g) || []).join("");
+            // استخراج الأرقام المعثور عليها
+            let digitsArray = converted.match(/[0-9]/g) || [];
+            let digits = digitsArray.join("");
 
             let resultBox = document.getElementById('resultBox');
-
-            if (!digits) return; // انتظار نطق الأرقام
+            if (digitsArray.length < 3) return; // الانتظار لحين نطق معظم الأرقام
 
             resultBox.style.display = 'block';
 
-            // المطابقة الذكية: البحث برقم اللوحة أولاً في قاعدة البيانات
+            // البحث الذكي: مطابقة بالأرقام كاملة أو مع ترتيب الأرقام
             let matched = plateDB.find(p => p.digits === digits);
+
+            // لو المتصفح عكس رقمين (مثل 4674 بدلاً من 4764)، نقارن بوجود أرقام اللوحة نفسها
+            if (!matched && digitsArray.length >= 4) {{
+                let sortedInput = digitsArray.slice().sort().join("");
+                matched = plateDB.find(p => p.digits.split('').sort().join("") === sortedInput);
+            }}
 
             if (matched) {{
                 resultBox.className = 'status-box found-box';
