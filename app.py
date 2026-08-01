@@ -17,12 +17,11 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ نظام فحص اللوحات المباشر (مجاني 100%)")
-st.caption("الاستماع العربي الفوري مع التصحيح الذكي لتخمينات المتصفح")
+st.title("⚡ نظام فحص اللوحات المباشر (المطور)")
+st.caption("يعالج أخطاء المتصفح الصوتية مجاناً وبدقة فائقة")
 st.markdown("---")
 
 def parse_plate(text):
-    """تنظيف وتفكيك النص إلى أرقام وحروف"""
     if not text:
         return "", ""
     text = str(text).strip()
@@ -62,7 +61,7 @@ if uploaded_file:
     st.markdown("---")
 
     st.subheader("🎙️ الفحص الصوتي المباشر:")
-    st.write("اضغطي على الزر وابدئي بنطق اللوحات تباعاً دون توقف:")
+    st.write("اضغطي على الزر وانطقي اللوحة مباشرة:")
 
     db_json = json.dumps(plate_database, ensure_ascii=False)
 
@@ -72,7 +71,7 @@ if uploaded_file:
         <div id="status" style="margin-top: 10px; color: #666; font-size: 14px;">الميكروفون متوقف</div>
         
         <div style="margin-top: 15px; background: #f8f9fa; padding: 15px; border-radius: 10px;">
-            <div style="font-size: 14px; color: #555;">النص الملتقط من المتصفح:</div>
+            <div style="font-size: 14px; color: #555;">النص الملتقط:</div>
             <div id="liveText" style="font-size: 24px; font-weight: bold; color: #007bff; min-height: 35px;">-</div>
         </div>
 
@@ -92,7 +91,7 @@ if uploaded_file:
             recognition = new SpeechRecognition();
             recognition.continuous = true;
             recognition.interimResults = true;
-            recognition.lang = 'ar-SA'; // اللغة العربية
+            recognition.lang = 'ar-SA';
 
             recognition.onstart = function() {{
                 recognizing = true;
@@ -133,30 +132,33 @@ if uploaded_file:
             }}
         }}
 
+        function cleanText(text) {{
+            // تحويل الأخطاء الصوتية الشائعة للمتصفح إلى الحروف الأصلية
+            let t = text;
+            t = t.replace(/أفلام|افلام|بسل|بصل/g, "بسل");
+            t = t.replace(/أحلام|احلام/g, "أحل");
+            t = t.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
+            return t;
+        }}
+
         function matchSmart(phrase) {{
-            // تحويل الأرقام العربية إلى إنجليزية
-            let converted = phrase.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
+            let cleaned = cleanText(phrase);
             
             // استخراج الأرقام فقط
-            let digits = (converted.match(/[0-9]/g) || []).join("");
-            
-            // استخراج الحروف العربية
-            let letters = (converted.match(/[\u0600-\u06FF]/g) || []).join("");
+            let digits = (cleaned.match(/[0-9]/g) || []).join("");
 
             let resultBox = document.getElementById('resultBox');
 
-            if (!digits) return; // إذا لم يلقط أرقاماً ينظر الكلمة التالية
+            if (!digits) return; // انتظار نطق الأرقام
 
             resultBox.style.display = 'block';
 
-            // المطابقة الذكية: تبدأ بالأرقام
+            // المطابقة الذكية: البحث برقم اللوحة أولاً في قاعدة البيانات
             let matched = plateDB.find(p => p.digits === digits);
 
             if (matched) {{
                 resultBox.className = 'status-box found-box';
                 resultBox.innerHTML = '⚠️ اللوحة موجودة بالملف: (' + matched.original + ')';
-                
-                // تنبيه اهتزاز وصوت
                 if ("vibrate" in navigator) {{ navigator.vibrate([300, 100, 300]); }}
                 playBeep();
             }} else {{
