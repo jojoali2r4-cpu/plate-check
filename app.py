@@ -17,7 +17,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ نظام فحص اللوحات (عرض المتشابهة مباشرة)")
+st.title("⚡ نظام فحص اللوحات (حروف مطابقة تماماً + أرقام مبدلة)")
 st.markdown("---")
 
 def parse_plate(text):
@@ -70,7 +70,7 @@ if uploaded_file:
         </div>
 
         <div id="resultBox" class="status-box" style="display:none;">
-            <div style="font-weight: bold; margin-bottom: 8px; color: #111;">اللوحات القريبة أو المطابقة بالملف:</div>
+            <div style="font-weight: bold; margin-bottom: 8px; color: #111;">اللوحات المطابقة (حروف متطابقة + أرقام مبدلة):</div>
             <div id="platesList"></div>
         </div>
     </div>
@@ -126,7 +126,7 @@ if uploaded_file:
                 let currentText = finalTranscript || interimTranscript;
                 if (currentText.trim() !== "") {{
                     document.getElementById('liveText').innerText = currentText;
-                    findSimilarPlates(currentText);
+                    findExactLettersSwappedDigits(currentText);
                 }}
             }};
         }}
@@ -150,7 +150,7 @@ if uploaded_file:
             resultBox.style.display = 'none';
         }}
 
-        function findSimilarPlates(phrase) {{
+        function findExactLettersSwappedDigits(phrase) {{
             let t = phrase;
             
             // تحويل الأرقام العربية الهندية إلى إنجليزية
@@ -168,15 +168,14 @@ if uploaded_file:
                  .replace(/تمانية|ثمانية|ثامنه|تمنيه|ثمان/g, "8")
                  .replace(/تسعة|تسعه|تسع/g, "9");
 
-            // توحيد الحروف
+            // توحيد الحروف المنطوقة
             t = t.replace(/بسلام|باسلام|بصل|باسيل|بأسين|باسين|باء سين|با سين|باء سين لام|باسين لام|بس ل|افلام|أفلام/g, "بسل");
 
-            // استخراج الأرقام وترتيبها بغض النظر عن تبديل الخانات
-            let inputDigitsArray = t.match(/[0-9]/g) || [];
-            let inputDigitsSorted = inputDigitsArray.sort().join("");
+            // استخراج الأرقام وترتيبها (لتجاوز تبديل الخانات)
+            let inputDigitsSorted = (t.match(/[0-9]/g) || []).sort().join("");
             
+            // استخراج الحروف بدقة ونقاء تام (بدون حذف حروف المد أو التغيير العشوائي)
             let inputLetters = (t.match(/[\\u0600-\\u06FF]/g) || []).join("").replace(/\\s+/g, '');
-            inputLetters = inputLetters.replace(/[اأإآىيؤئةو]/g, '');
 
             let resultBox = document.getElementById('resultBox');
             let platesListDiv = document.getElementById('platesList');
@@ -185,16 +184,14 @@ if uploaded_file:
             let matchedCount = 0;
 
             plateDB.forEach(p => {{
-                let targetDigitsArray = p.digits ? p.digits.split('') : [];
-                let targetDigitsSorted = targetDigitsArray.sort().join("");
-                
-                let cleanTargetLetters = p.letters ? p.letters.replace(/\\s+/g, '').replace(/[اأإآىيؤئةو]/g, '') : "";
+                let targetDigitsSorted = p.digits ? p.digits.split('').sort().join('') : "";
+                let cleanTargetLetters = p.letters ? p.letters.replace(/\\s+/g, '') : "";
 
-                // شرط العرض: مطابقة الأرقام (حتى لو مبدلة) أو تشابه الحروف الكلي
+                // الشرط الصارم: تطابق الحروف تماماً + نفس الأرقام حتى لو كانت مبدلة
+                let lettersMatch = (inputLetters === cleanTargetLetters);
                 let digitsMatch = (inputDigitsSorted !== "" && inputDigitsSorted === targetDigitsSorted);
-                let lettersMatch = (inputLetters.includes("بسل".replace(/[اأإآىيؤئةو]/g, '')) && cleanTargetLetters.includes("بسل".replace(/[اأإآىيؤئةو]/g, ''))) || (inputLetters === cleanTargetLetters) || (cleanTargetLetters === "" && inputLetters === "");
 
-                if (digitsMatch || (inputDigitsSorted === "" && lettersMatch)) {{
+                if (lettersMatch && digitsMatch) {{
                     matchedCount++;
                     let item = document.createElement('div');
                     item.className = 'plate-item';
@@ -205,7 +202,7 @@ if uploaded_file:
 
             resultBox.style.display = 'block';
             if (matchedCount === 0) {{
-                platesListDiv.innerHTML = '<div style="color: #dc3545; font-weight: bold;">❌ لا توجد لوحة مطابقة تماماً، تأكد من النطق.</div>';
+                platesListDiv.innerHTML = '<div style="color: #dc3545; font-weight: bold;">❌ لا توجد لوحة مطابقة تماماً (الحروف يجب أن تتطابق والأرقام تكون نفسها مبدلة).</div>';
             }} else {{
                 if ("vibrate" in navigator) {{ navigator.vibrate(200); }}
             }}
