@@ -17,7 +17,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ نظام فحص اللوحات (النسخة المرنة الفائقة)")
+st.title("⚡ نظام فحص اللوحات (المطابقة المباشرة الدقيقة)")
 st.markdown("---")
 
 def parse_plate(text):
@@ -70,7 +70,7 @@ if uploaded_file:
         </div>
 
         <div id="resultBox" class="status-box" style="display:none;">
-            <div style="font-weight: bold; margin-bottom: 8px; color: #111;">اللوحات المطابقة (حروف متقاربة + أرقام مبدلة):</div>
+            <div style="font-weight: bold; margin-bottom: 8px; color: #111;">اللوحات المطابقة بالملف:</div>
             <div id="platesList"></div>
         </div>
     </div>
@@ -126,7 +126,7 @@ if uploaded_file:
                 let currentText = finalTranscript || interimTranscript;
                 if (currentText.trim() !== "") {{
                     document.getElementById('liveText').innerText = currentText;
-                    findFlexibleMatch(currentText);
+                    findDirectMatch(currentText);
                 }}
             }};
         }}
@@ -150,13 +150,13 @@ if uploaded_file:
             resultBox.style.display = 'none';
         }}
 
-        function findFlexibleMatch(phrase) {{
+        function findDirectMatch(phrase) {{
             let t = phrase;
             
             // تحويل الأرقام العربية الهندية إلى إنجليزية
             t = t.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
             
-            // تحويل كلمات الأرقام إلى قيم رقمية
+            // تحويل الكلمات المنطوقة للأرقام إلى قيم رقمية حقيقية
             t = t.replace(/صفر/g, "0")
                  .replace(/واحد/g, "1")
                  .replace(/اتنين|ثثنين|اثنين/g, "2")
@@ -168,14 +168,14 @@ if uploaded_file:
                  .replace(/تمانية|ثمانية|ثامنه|تمنيه|ثمان/g, "8")
                  .replace(/تسعة|تسعه|تسع/g, "9");
 
-            // توحيد الحروف مهما كتبها المتصفح بمسافات (مثل: باسل، با صل، باسل لام)
+            // تصحيح نطق الحروف الشائع (مثل باسل)
             t = t.replace(/بسلام|باسلام|بصل|باسيل|بأسين|باسين|باء سين|با سين|باء سين لام|باسين لام|بس ل|افلام|أفلام/g, "بسل");
 
-            // استخراج الأرقام وترتيبها (لتجاوز تبديل الخانات)
+            // استخراج الأرقام وترتيبها (لتجاوز تبديل الخانات تماماً)
             let inputDigitsSorted = (t.match(/[0-9]/g) || []).sort().join("");
             
-            // استخراج الحروف وإزالة المسافات وحروف المد تماماً لضمان المطابقة المطلقة
-            let inputLetters = (t.match(/[\\u0600-\\u06FF]/g) || []).join("").replace(/\\s+/g, '').replace(/[اأإآىيؤئةو]/g, '');
+            // استخراج الحروف المتاحة وتنظيفها من الفراغات
+            let inputLetters = (t.match(/[\\u0600-\\u06FF]/g) || []).join("").replace(/\\s+/g, '');
 
             let resultBox = document.getElementById('resultBox');
             let platesListDiv = document.getElementById('platesList');
@@ -185,13 +185,13 @@ if uploaded_file:
 
             plateDB.forEach(p => {{
                 let targetDigitsSorted = p.digits ? p.digits.split('').sort().join('') : "";
-                let cleanTargetLetters = p.letters ? p.letters.replace(/\\s+/g, '').replace(/[اأإآىيؤئةو]/g, '') : "";
+                let cleanTargetLetters = p.letters ? p.letters.replace(/\\s+/g, '') : "";
 
-                // المطابقة الفائقة: حروف متطابقة (بدون مسافات أو مدود) + أرقام مبدلة أو صحيحة
-                let lettersMatch = (inputLetters !== "" && cleanTargetLetters.includes(inputLetters)) || (inputLetters.includes(cleanTargetLetters));
+                // التحقق من وجود الحروف والأرقام بغض النظر عن ترتيب نطق الأرقام
+                let hasLetters = (inputLetters.includes("بسل") && cleanTargetLetters.includes("بسل")) || (inputLetters === cleanTargetLetters);
                 let digitsMatch = (inputDigitsSorted !== "" && inputDigitsSorted === targetDigitsSorted);
 
-                if (lettersMatch && digitsMatch) {{
+                if (hasLetters && digitsMatch) {{
                     matchedCount++;
                     let item = document.createElement('div');
                     item.className = 'plate-item';
@@ -202,7 +202,7 @@ if uploaded_file:
 
             resultBox.style.display = 'block';
             if (matchedCount === 0) {{
-                platesListDiv.innerHTML = '<div style="color: #dc3545; font-weight: bold;">❌ لا توجد لوحة مطابقة. (حاول النطق بوضوح وثبات).</div>';
+                platesListDiv.innerHTML = '<div style="color: #dc3545; font-weight: bold;">❌ لا توجد لوحة مطابقة بالملف.</div>';
             }} else {{
                 if ("vibrate" in navigator) {{ navigator.vibrate(200); }}
             }}
