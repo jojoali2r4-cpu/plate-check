@@ -17,8 +17,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ نظام فحص اللوحات الفوري")
-st.caption("التعرف الصوتي السريع والمطابقة الذكية")
+st.title("⚡ نظام فحص اللوحات الذكي (مضاد تبديل الأرقام)")
+st.caption("يتعامل بذكاء مع تبديل المتصفح للأرقام الصوتية")
 st.markdown("---")
 
 def parse_plate(text):
@@ -97,9 +97,6 @@ if uploaded_file:
 
             recognition.onerror = function(event) {{
                 console.log("Speech Recognition Error: ", event.error);
-                if (event.error === 'no-speech') {{
-                    document.getElementById('status').innerText = "لم يتم التقاط صوت، يرجى التحدث بوضوح...";
-                }}
             }};
 
             recognition.onend = function() {{
@@ -184,17 +181,23 @@ if uploaded_file:
 
             let matched = null;
 
-            // 1. البحث بالحروف والأرقام معاً
+            // 1. المطابقة الدقيقة بالأرقام والحروف معاً
             if (digits && letters) {{
                 matched = plateDB.find(p => p.digits === digits && (p.letters.includes(letters) || letters.includes(p.letters)));
             }}
             
-            // 2. البحث بالأرقام فقط إذا كانت 3 أرقام أو أكثر
+            // 2. المطابقة بالأرقام التامة
             if (!matched && digits.length >= 3) {{
                 matched = plateDB.find(p => p.digits === digits);
             }}
 
-            // 3. البحث بالحروف فقط (مثل "بسل")
+            // 3. الحل الذكي لتبديل الأرقام: مطابقة الأرقام بغض النظر عن الترتيب (مثل 4674 تطابق 4764)
+            if (!matched && digits.length >= 3) {{
+                let sortedInputDigits = digits.split('').sort().join('');
+                matched = plateDB.find(p => p.digits.split('').sort().join('') === sortedInputDigits);
+            }}
+
+            // 4. المطابقة بالحروف فقط (لو لم تُقرأ الأرقام بدقة)
             if (!matched && letters.length >= 2) {{
                 matched = plateDB.find(p => p.letters === letters || p.original.includes(letters));
             }}
