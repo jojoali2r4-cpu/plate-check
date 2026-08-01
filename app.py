@@ -18,22 +18,20 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ نظام فحص اللوحات الفوري")
-st.caption("معالجة متقدمة لأسماء الحروف ومطابقة خوارزمية الأرقام المتقطعة")
+st.title("⚡ نظام فحص اللوحات الفوري (النسخة النهائية)")
+st.caption("إلغاء قيود ترتيب الأرقام ودمج الحروف المنفصلة تلقائياً")
 st.markdown("---")
 
 def parse_plate(text):
     if not text:
         return "", ""
     text = str(text).strip()
-    
     arabic_digits = "٠١٢٣٤٥٦٧٨٩"
     english_digits = "0123456789"
     text = text.translate(str.maketrans(arabic_digits, english_digits))
     
     digits = "".join(re.findall(r'[0-9]', text))
     letters = "".join(re.findall(r'[\u0600-\u06FF]', text))
-    
     return letters, digits
 
 uploaded_file = st.file_uploader("اختر ملف الإكسيل (Excel)", type=["xlsx", "xls"])
@@ -142,51 +140,15 @@ if uploaded_file:
             resultBox.style.display = 'none';
         }}
 
-        function cleanSpokenText(text) {{
-            let t = text;
-            
-            // تحويل الأرقام العربية الهندية إلى أرقام إنجليزية
-            t = t.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
-
-            // استبدال أسماء الحروف الصريحة بالحرف المباشر
-            t = t.replace(/باء|با/g, "ب")
-                 .replace(/سين|سـ/g, "س")
-                 .replace(/لام|لا/g, "ل")
-                 .replace(/ألف|الف/g, "أ")
-                 .replace(/تاء|تا/g, "ت")
-                 .replace(/ثاء|ثا/g, "ث")
-                 .replace(/جيم/g, "ج")
-                 .replace(/حاء|حا/g, "ح")
-                 .replace(/خاء|خا/g, "خ")
-                 .replace(/دال/g, "د")
-                 .replace(/ذال/g, "ذ")
-                 .replace(/راء|را/g, "ر")
-                 .replace(/زاي|زين/g, "ز")
-                 .replace(/شين/g, "ش")
-                 .replace(/صاد/g, "ص")
-                 .replace(/ضاد/g, "ض")
-                 .replace(/طاء|طا/g, "ط")
-                 .replace(/ظاء|ظا/g, "ظ")
-                 .replace(/عين/g, "ع")
-                 .replace(/غين/g, "غ")
-                 .replace(/فاء|فا/g, "ف")
-                 .replace(/قاف/g, "ق")
-                 .replace(/كاف/g, "ك")
-                 .replace(/ميم/g, "م")
-                 .replace(/نون/g, "ن")
-                 .replace(/هاء|ها/g, "هـ")
-                 .replace(/واو/g, "و")
-                 .replace(/ياء|يا/g, "ي");
-
-            return t;
-        }}
-
         function matchFuzzy(phrase) {{
-            let cleaned = cleanSpokenText(phrase);
+            // تحويل الأرقام العربية الهندية إلى إنجليزية
+            let converted = phrase.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
             
-            // استخراج الأرقام والحروف بعد التنظيف
-            let inputDigits = (cleaned.match(/[0-9]/g) || []).join("");
-            let inputLetters = (cleaned.match(/[\u0600-\u06FF]/g) || []).join("").replace(/\s+/g, '');
+            // استخراج الأرقام وحدها وترتيبها لتلافي خطأ الترتيب أو التبديل
+            let inputDigits = (converted.match(/[0-9]/g) || []).sort().join("");
+            
+            // استخراج جميع الحروف العربية وإزالة كافة المسافات بينها لضمان دمجها
+            let inputLetters = (converted.match(/[\u0600-\u06FF]/g) || []).join("").replace(/\\s+/g, '');
 
             let resultBox = document.getElementById('resultBox');
             resultBox.style.display = 'block';
@@ -197,27 +159,32 @@ if uploaded_file:
                 let lettersMatch = false;
                 let digitsMatch = false;
 
-                // 1. مطابقة الحروف (سواء كانت بسل أو ب س ل متفرقة)
+                // مطابقة الحروف المرنة (إذا كانت الحروف المنطوقة جزءاً من حروف اللوحة أو العكس)
                 if (!inputLetters || inputLetters.length === 0) {{
                     lettersMatch = true;
                 }} else if (p.letters) {{
-                    // التحقق من وجود الحروف بالكامل في النص المنطوق
-                    let matchCount = 0;
-                    for (let char of p.letters) {{
-                        if (inputLetters.includes(char)) matchCount++;
-                    }}
-                    if (matchCount >= Math.min(2, p.letters.length)) {{
+                    let targetLettersSorted = p.letters.split('').sort().join('');
+                    let inputLettersSorted = inputLetters.split('').sort().join('');
+                    
+                    // إذا تقاطعت الحروف أو تداخلت
+                    if (targetLettersSorted.includes(inputLetters) || inputLetters.includes(targetLettersSorted) || targetLettersSorted === inputLetters) {{
                         lettersMatch = true;
+                    }} else {{
+                        // مطابقة تقريبية بالحروف الفردية
+                        let matchCount = 0;
+                        for (let char of inputLetters) {{
+                            if (p.letters.includes(char)) matchCount++;
+                        }}
+                        if (matchCount >= Math.min(2, p.letters.length)) {{
+                            lettersMatch = true;
+                        }}
                     }}
                 }}
 
-                // 2. مطابقة الأرقام (تتسامح مع تبديل الخانات مثل 4674 مقابل 4764)
+                // مطابقة الأرقام حصرياً بعد الترتيب (تتجاوز تماماً مشكلة تبديل الخانات مثل 4674 و 4764)
                 if (inputDigits && p.digits) {{
-                    let sortedInput = inputDigits.split('').sort().join('');
-                    let sortedTarget = p.digits.split('').sort().join('');
-                    
-                    // المطابقة إذا كانت نفس عناصر الأرقام أو إذا كان أحدهما يحتوي الآخر
-                    if (sortedInput === sortedTarget || inputDigits.includes(p.digits) || p.digits.includes(inputDigits)) {{
+                    let targetDigitsSorted = p.digits.split('').sort().join('');
+                    if (inputDigits === targetDigitsSorted || p.digits.includes(inputDigits) || inputDigits.includes(targetDigitsSorted)) {{
                         digitsMatch = true;
                     }}
                 }}
