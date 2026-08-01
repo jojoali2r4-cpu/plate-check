@@ -18,7 +18,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ نظام فحص اللوحات الفوري (النسخة الذكية الشاملة)")
+st.title("⚡ نظام فحص اللوحات الفوري (النسخة النهائية المطورة)")
 st.markdown("---")
 
 def parse_plate(text):
@@ -124,7 +124,7 @@ if uploaded_file:
                 let currentText = finalTranscript || interimTranscript;
                 if (currentText.trim() !== "") {{
                     document.getElementById('liveText').innerText = currentText;
-                    matchUltimate(currentText);
+                    matchAbsolute(currentText);
                 }}
             }};
         }}
@@ -148,13 +148,13 @@ if uploaded_file:
             resultBox.style.display = 'none';
         }}
 
-        function matchUltimate(phrase) {{
+        function matchAbsolute(phrase) {{
             let t = phrase;
             
             // تحويل الأرقام العربية الهندية إلى إنجليزية
             t = t.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
             
-            // تحويل الكلمات المنطوقة للأرقام إلى قيم رقمية حقيقية
+            // تحويل كلمات الأرقام العربية إلى قيم رقمية
             t = t.replace(/صفر/g, "0")
                  .replace(/واحد/g, "1")
                  .replace(/اتنين|ثثنين|اثنين/g, "2")
@@ -166,14 +166,17 @@ if uploaded_file:
                  .replace(/تمانية|ثمانية|ثامنه|تمنيه/g, "8")
                  .replace(/تسعة|تسعه/g, "9");
 
-            // توحيد الحروف المنطوقة (مثل باسين لام أو باء سين لام) إلى بسل
-            t = t.replace(/بأسين|باسين|باء سين|با سين|باء سين لام|باسين لام|بس ل|افلام|أفلام|بصل/g, "بسل");
+            // توحيد كافة أشكال نطق الحروف (بسل / باسيل / باسين لام / افلام) إلى الاختصار الصحيح
+            t = t.replace(/باسيل|بأسين|باسين|باء سين|با سين|باء سين لام|باسين لام|بس ل|افلام|أفلام|بصل/g, "بسل");
 
-            // استخراج الأرقام وترتيبها لتجاوز تبديل الخانات الشفهية (مثل 4674 و 4764)
+            // استخراج الأرقام وترتيبها لتجاوز تبديل الخانات (مثل 4674 و 4764)
             let inputDigitsSorted = (t.match(/[0-9]/g) || []).sort().join("");
             
             // استخراج الحروف وتنقيتها
             let inputLetters = (t.match(/[\\u0600-\\u06FF]/g) || []).join("").replace(/\\s+/g, '');
+            
+            // تنقية إضافية لإزالة الياء الزائدة في النطق مثل "باسيل" لتصبح "بسل"
+            inputLetters = inputLetters.replace(/ي/g, '');
 
             let resultBox = document.getElementById('resultBox');
             resultBox.style.display = 'block';
@@ -182,9 +185,9 @@ if uploaded_file:
 
             plateDB.forEach(p => {{
                 let targetDigitsSorted = p.digits ? p.digits.split('').sort().join('') : "";
-                let cleanTargetLetters = p.letters ? p.letters.replace(/\\s+/g, '') : "";
+                let cleanTargetLetters = p.letters ? p.letters.replace(/\\s+/g, '').replace(/ي/g, '') : "";
 
-                // مطابقة الأرقام (مع تبديل الخانات) والحروف معاً بدقة صارمة
+                // مطابقة دقيقة للأرقام والحروف معاً
                 let digitsMatch = (inputDigitsSorted !== "" && inputDigitsSorted === targetDigitsSorted);
                 let lettersMatch = (inputLetters.includes("بسل") && cleanTargetLetters === "بسل") || (inputLetters === cleanTargetLetters) || (cleanTargetLetters === "" && inputLetters === "");
 
