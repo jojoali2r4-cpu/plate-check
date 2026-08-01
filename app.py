@@ -18,7 +18,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ نظام فحص اللوحات الفوري (النسخة النهائية الماسية)")
+st.title("⚡ نظام فحص اللوحات الفوري (النسخة الخارقة المحدثة)")
 st.markdown("---")
 
 def parse_plate(text):
@@ -124,7 +124,7 @@ if uploaded_file:
                 let currentText = finalTranscript || interimTranscript;
                 if (currentText.trim() !== "") {{
                     document.getElementById('liveText').innerText = currentText;
-                    matchDiamond(currentText);
+                    matchUltimateEngine(currentText);
                 }}
             }};
         }}
@@ -148,31 +148,32 @@ if uploaded_file:
             resultBox.style.display = 'none';
         }}
 
-        function matchDiamond(phrase) {{
+        function matchUltimateEngine(phrase) {{
             let t = phrase;
             
             // تحويل الأرقام العربية الهندية إلى إنجليزية
             t = t.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
             
-            // تحويل الكلمات المنطوقة للأرقام إلى قيم رقمية حقيقية
+            // تحويل الكلمات المنطوقة للأرقام إلى قيم رقمية
             t = t.replace(/صفر/g, "0")
                  .replace(/واحد/g, "1")
                  .replace(/اتنين|ثثنين|اثنين/g, "2")
                  .replace(/تلاتة|ثلاثة|تلات/g, "3")
-                 .replace(/اربعة|أربعة|اربعه/g, "4")
+                 .replace(/اربعة|أربعة|اربعه|ربع/g, "4")
                  .replace(/خمسة|خمسه/g, "5")
-                 .replace(/سته|ستة/g, "6")
+                 .replace(/سته|ستة|ست/g, "6")
                  .replace(/سبعة|سبعه/g, "7")
-                 .replace(/تمانية|ثمانية|ثامنه|تمنيه/g, "8")
-                 .replace(/تسعة|تسعه/g, "9");
+                 .replace(/تمانية|ثمانية|ثامنه|تمنيه|ثمان/g, "8")
+                 .replace(/تسعة|تسعه|تسع/g, "9");
 
-            // تصحيح كافة أخطاء المتصفح لنطق الحروف
+            // توحيد الحروف مهما كتبها المتصفح (بسلام، بصل، باسيل، إلخ)
             t = t.replace(/بسلام|باسلام|بصل|باسيل|بأسين|باسين|باء سين|با سين|باء سين لام|باسين لام|بس ل|افلام|أفلام/g, "بسل");
 
-            // استخراج الأرقام وترتيبها تماماً لتجاوز مشكلة تبديل خانات النطق
-            let inputDigitsSorted = (t.match(/[0-9]/g) || []).sort().join("");
+            // استخراج جميع الأرقام الموجودة في النص وترتيبها تصاعدياً لتجاوز مشكلة تبديل الخانات نهائياً
+            let inputDigitsArray = t.match(/[0-9]/g) || [];
+            let inputDigitsSorted = inputDigitsArray.sort().join("");
             
-            // استخراج الحروف وتنقيتها
+            // استخراج وتصفية الحروف
             let inputLetters = (t.match(/[\\u0600-\\u06FF]/g) || []).join("").replace(/\\s+/g, '');
             inputLetters = inputLetters.replace(/[اأإآىيؤئةو]/g, '');
 
@@ -182,10 +183,12 @@ if uploaded_file:
             let matched = null;
 
             plateDB.forEach(p => {{
-                // ترتيب أرقام اللوحة المخزنة في الملف أيضاً لضمان المطابقة المطلقة بغض النظر عن ترتيب النطق
-                let targetDigitsSorted = p.digits ? p.digits.split('').sort().join('') : "";
+                let targetDigitsArray = p.digits ? p.digits.split('') : [];
+                let targetDigitsSorted = targetDigitsArray.sort().join("");
+                
                 let cleanTargetLetters = p.letters ? p.letters.replace(/\\s+/g, '').replace(/[اأإآىيؤئةو]/g, '') : "";
 
+                // المطابقة النهائية للأرقام (بترتيب مرن) والحروف (بشكل شامل)
                 let digitsMatch = (inputDigitsSorted !== "" && inputDigitsSorted === targetDigitsSorted);
                 let lettersMatch = (inputLetters.includes("بسل".replace(/[اأإآىيؤئةو]/g, '')) && cleanTargetLetters.includes("بسل".replace(/[اأإآىيؤئةو]/g, ''))) || (inputLetters === cleanTargetLetters) || (cleanTargetLetters === "" && inputLetters === "");
 
