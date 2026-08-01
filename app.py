@@ -111,8 +111,8 @@ if uploaded_file:
 
             recognition.onresult = function(event) {{
                 let fullTranscript = '';
-                for (let i = event.resultIndex; i < event.results.length; ++i) {{
-                    fullTranscript += event.results[i][0].transcript;
+                for (let i = 0; i < event.results.length; ++i) {{
+                    fullTranscript += event.results[i][0].transcript + ' ';
                 }}
 
                 if (fullTranscript.trim() !== '') {{
@@ -169,45 +169,11 @@ if uploaded_file:
             return t;
         }}
 
-        function getSimilarity(s1, s2) {{
-            let longer = s1;
-            let shorter = s2;
-            if (s1.length < s2.length) {{
-                longer = s2;
-                shorter = s1;
-            }}
-            let longerLength = longer.length;
-            if (longerLength === 0) return 1.0;
-            return (longerLength - editDistance(longer, shorter)) / parseFloat(longerLength);
-        }}
-
-        function editDistance(s1, s2) {{
-            s1 = s1.toLowerCase();
-            s2 = s2.toLowerCase();
-            let costs = new Array();
-            for (let i = 0; i <= s1.length; i++) {{
-                let lastValue = i;
-                for (let j = 0; j <= s2.length; j++) {{
-                    if (i == 0) costs[j] = j;
-                    else {{
-                        if (j > 0) {{
-                            let newValue = costs[j - 1];
-                            if (s1.charAt(i - 1) != s2.charAt(j - 1))
-                                newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
-                            costs[j - 1] = lastValue;
-                            lastValue = newValue;
-                        }}
-                    }}
-                }}
-                if (i > 0) costs[s2.length] = lastValue;
-            }}
-            return costs[s2.length];
-        }}
-
         function matchFuzzy(phrase) {{
-            let converted = phrase.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
-            let inputDigits = (converted.match(/[0-9]/g) || []).join("");
+            let converted = phrase.replace(/[٠-٩]/g, d => "٠١٢٣٥٦٧٨٩".indexOf(d));
             
+            // استخراج الأرقام وحدها والحروف وحدها
+            let inputDigits = (converted.match(/[0-9]/g) || []).join("");
             let normalizedText = normalizeArabicLetters(converted);
             let inputLetters = (normalizedText.match(/[\u0600-\u06FF]/g) || []).join("").replace(/\s+/g, '');
 
@@ -215,28 +181,29 @@ if uploaded_file:
             resultBox.style.display = 'block';
 
             let matched = null;
-            let maxScore = 0;
 
+            // مطابقة قائمة على وجود كل الأرقام بغض النظر عن ترتيبها المتقطع + الحروف
             plateDB.forEach(p => {{
-                let letterScore = 0;
-                let digitScore = 0;
+                let lettersMatch = false;
+                let digitsMatch = false;
 
-                if (inputLetters && p.letters) {{
-                    letterScore = getSimilarity(inputLetters, p.letters);
+                // مطابقة الحروف (سواء باء سين لام -> بسل)
+                if (inputLetters && p.letters && (inputLetters.includes(p.letters) || p.letters.includes(inputLetters))) {{
+                    lettersMatch = true;
                 }}
 
+                // مطابقة مجموعة الأرقام (حتى لو وصلت 4 6 7 4 مطابقة لـ 4764)
                 if (inputDigits && p.digits) {{
-                    let exactDigits = getSimilarity(inputDigits, p.digits);
-                    let sortedDigits = getSimilarity(inputDigits.split('').sort().join(''), p.digits.split('').sort().join(''));
-                    digitScore = Math.max(exactDigits, sortedDigits);
+                    let sortedInput = inputDigits.split('').sort().join('');
+                    let sortedTarget = p.digits.split('').sort().join('');
+                    
+                    if (sortedInput === sortedTarget || inputDigits.includes(p.digits) || p.digits.includes(inputDigits)) {{
+                        digitsMatch = true;
+                    }}
                 }}
 
-                if (letterScore >= 0.6 && digitScore >= 0.7) {{
-                    let totalScore = (letterScore * 0.5) + (digitScore * 0.5);
-                    if (totalScore > maxScore) {{
-                        maxScore = totalScore;
-                        matched = p;
-                    }}
+                if (lettersMatch && digitsMatch) {{
+                    matched = p;
                 }}
             }});
 
