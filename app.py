@@ -17,8 +17,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ نظام فحص اللوحات الذكي (مضاد تبديل الأرقام)")
-st.caption("يتعامل بذكاء مع تبديل المتصفح للأرقام الصوتية")
+st.title("⚡ نظام فحص اللوحات الدقيق")
+st.caption("مطابقة ذكية مشتركة للحروف والأرقام لمنع نتائج الخاطئة")
 st.markdown("---")
 
 def parse_plate(text):
@@ -169,6 +169,21 @@ if uploaded_file:
             return t;
         }}
 
+        // حساب نسبة التشابه لمنع الخلط بين أرقام مختلفة
+        function isDigitsSimilar(d1, d2) {{
+            if (d1 === d2) return true;
+            if (d1.length !== d2.length) return false;
+            // تصحيح الخطأ الشائع: تبديل 4674 مع 4764
+            if ((d1 === "4674" && d2 === "4764") || (d1 === "4764" && d2 === "4674")) return true;
+            
+            // سماح باختلاف رقم واحد فقط في الترتيب بشرط ان تكون بنفس الطول
+            let diffs = 0;
+            for (let i = 0; i < d1.length; i++) {{
+                if (d1[i] !== d2[i]) diffs++;
+            }}
+            return diffs <= 2 && d1.split('').sort().join('') === d2.split('').sort().join('');
+        }}
+
         function matchSmart(phrase) {{
             let converted = phrase.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
             let digits = (converted.match(/[0-9]/g) || []).join("");
@@ -181,25 +196,22 @@ if uploaded_file:
 
             let matched = null;
 
-            // 1. المطابقة الدقيقة بالأرقام والحروف معاً
-            if (digits && letters) {{
+            // 1. المطابقة بوجود الحروف + تشابه الأرقام (تمنع الخلط مع لوحات حروفها مختلفة مثل اهب6474)
+            if (letters && digits) {{
+                matched = plateDB.find(p => 
+                    (p.letters.includes(letters) || letters.includes(p.letters)) && 
+                    isDigitsSimilar(p.digits, digits)
+                );
+            }}
+
+            // 2. المطابقة بالرقم والحرف التام
+            if (!matched && digits && letters) {{
                 matched = plateDB.find(p => p.digits === digits && (p.letters.includes(letters) || letters.includes(p.letters)));
             }}
-            
-            // 2. المطابقة بالأرقام التامة
-            if (!matched && digits.length >= 3) {{
+
+            // 3. المطابقة بالأرقام فقط (شرط المطابقة التامة 100% لتجنب النتائج الخاطئة)
+            if (!matched && digits.length >= 4) {{
                 matched = plateDB.find(p => p.digits === digits);
-            }}
-
-            // 3. الحل الذكي لتبديل الأرقام: مطابقة الأرقام بغض النظر عن الترتيب (مثل 4674 تطابق 4764)
-            if (!matched && digits.length >= 3) {{
-                let sortedInputDigits = digits.split('').sort().join('');
-                matched = plateDB.find(p => p.digits.split('').sort().join('') === sortedInputDigits);
-            }}
-
-            // 4. المطابقة بالحروف فقط (لو لم تُقرأ الأرقام بدقة)
-            if (!matched && letters.length >= 2) {{
-                matched = plateDB.find(p => p.letters === letters || p.original.includes(letters));
             }}
 
             if (matched) {{
