@@ -3,21 +3,21 @@ import pandas as pd
 import re
 import json
 
-st.set_page_config(page_title="فحص اللوحات الذكي الفوري", layout="wide")
+st.set_page_config(page_title="فحص اللوحات الذكي التلقائي", layout="wide")
 
 st.markdown("""
     <style>
     body, div, h1, h2, h3, p { text-align: right; direction: rtl; }
     .status-box { font-size: 20px !important; font-weight: bold; text-align: right; padding: 15px; border-radius: 12px; margin-top: 15px; background-color: #f8f9fa; border: 2px solid #ccc; color: #333; }
-    .mic-btn { font-size: 18px; padding: 12px 24px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; margin: 5px; width: 48%; }
+    .mic-btn { font-size: 18px; padding: 14px 28px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; margin: 5px; width: 48%; }
     .start-btn { background-color: #28a745; color: white; }
     .stop-btn { background-color: #dc3545; color: white; }
     .clear-btn { background-color: #6c757d; color: white; }
-    .plate-item { background: #e2f0d9; padding: 10px; margin: 5px 0; border-radius: 6px; font-weight: bold; color: #274e13; font-size: 22px; }
+    .plate-item { background: #e2f0d9; padding: 12px; margin: 6px 0; border-radius: 6px; font-weight: bold; color: #274e13; font-size: 24px; }
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ نظام فحص اللوحات (الحل الجذري الشامل)")
+st.title("⚡ نظام فحص اللوحات التلقائي (بالصوت فقط)")
 st.markdown("---")
 
 def parse_plate(text):
@@ -44,7 +44,7 @@ if uploaded_file:
     for plate in raw_plates:
         letters, digits = parse_plate(plate)
         plate_database.append({
-            'original': str(plate),
+            'original': str(plate).strip(),
             'letters': letters,
             'digits': digits
         })
@@ -52,25 +52,27 @@ if uploaded_file:
     st.success(f"تم تحميل {len(plate_database)} لوحة بنجاح!")
     st.markdown("---")
 
-    st.subheader("🎙️ الفحص الصوتي الفوري:")
-    st.write("اضغطي على زر التشغيل وانطقي اللوحة مباشرة:")
+    st.subheader("🎙️ الفحص الصوتي التلقائي:")
+    st.write("اضغطي على زر التشغيل وانطقي اللوحة مباشرة ليتم جلب مطابقتها تلقائياً:")
 
     db_json = json.dumps(plate_database, ensure_ascii=False)
 
     components_code = f"""
     <div style="direction: rtl; text-align: center; font-family: sans-serif;">
-        <button id="toggleBtn" class="mic-btn start-btn" onclick="toggleSpeech()">🔴 تشغيل الاستماع</button>
-        <button id="clearBtn" class="mic-btn clear-btn" onclick="clearText()">🗑️ مسح النص</button>
+        <div>
+            <button id="toggleBtn" class="mic-btn start-btn" onclick="toggleSpeech()">🔴 تشغيل الاستماع</button>
+            <button class="mic-btn clear-btn" onclick="clearText()" style="width: 48%;">🗑️ مسح</button>
+        </div>
         
         <div id="status" style="margin-top: 10px; color: #666; font-size: 14px;">الميكروفون متوقف</div>
         
         <div style="margin-top: 15px; background: #f8f9fa; padding: 15px; border-radius: 10px;">
-            <div style="font-size: 14px; color: #555;">النص الملتقط لحظياً:</div>
-            <div id="liveText" style="font-size: 26px; font-weight: bold; color: #007bff; min-height: 35px;">-</div>
+            <div style="font-size: 14px; color: #555;">النص المنطوق تلقائياً:</div>
+            <div id="liveText" style="font-size: 28px; font-weight: bold; color: #007bff; min-height: 40px;">-</div>
         </div>
 
         <div id="resultBox" class="status-box" style="display:none;">
-            <div style="font-weight: bold; margin-bottom: 8px; color: #111;">اللوحات المطابقة بالملف:</div>
+            <div style="font-weight: bold; margin-bottom: 8px; color: #111;">اللوحة المطابقة تماماً بالملف:</div>
             <div id="platesList"></div>
         </div>
     </div>
@@ -92,7 +94,7 @@ if uploaded_file:
 
             recognition.onstart = function() {
                 recognizing = true;
-                document.getElementById('status').innerText = "🎙️ يستمع الآن.. انطقي بسرعة!";
+                document.getElementById('status').innerText = "🎙️ يستمع الآن.. انطقي اللوحة بوضوح!";
                 document.getElementById('toggleBtn').innerText = "⏹️ إيقاف الاستماع";
                 document.getElementById('toggleBtn').className = "mic-btn stop-btn";
             };
@@ -126,7 +128,7 @@ if uploaded_file:
                 let currentText = finalTranscript || interimTranscript;
                 if (currentText.trim() !== "") {
                     document.getElementById('liveText').innerText = currentText;
-                    findAbsoluteMatch(currentText);
+                    autoMatchPlate(currentText);
                 }
             };
         }
@@ -150,11 +152,14 @@ if uploaded_file:
             resultBox.style.display = 'none';
         }
 
-        function findAbsoluteMatch(phrase) {
+        function autoMatchPlate(phrase) {
             let t = phrase;
+            if (!t) return;
             
+            // تحويل الأرقام العربية إلى إنجليزية
             t = t.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
             
+            // مطابقة الأرقام المنطوقة لفظياً
             t = t.replace(/صفر/g, "0")
                  .replace(/واحد/g, "1")
                  .replace(/اتنين|ثثنين|اثنين/g, "2")
@@ -166,10 +171,10 @@ if uploaded_file:
                  .replace(/تمانية|ثمانية|ثامنه|تمنيه|ثمان/g, "8")
                  .replace(/تسعة|تسعه|تسع/g, "9");
 
+            // تصحيح نطق الحروف الشائع للوحات (مثل بسل)
             t = t.replace(/بسلام|باسلام|بصل|باسيل|بأسين|باسين|باء سين|با سين|باء سين لام|باسين لام|بس ل|افلام|أفلام/g, "بسل");
 
             let inputDigitsSorted = (t.match(/[0-9]/g) || []).sort().join("");
-            
             let inputLettersRaw = (t.match(/[\\u0600-\\u06FF]/g) || []).join("");
             let inputLettersClean = inputLettersRaw.replace(/\\s+/g, '').split('').sort().join('');
 
