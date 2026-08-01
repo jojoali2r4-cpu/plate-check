@@ -17,7 +17,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ نظام فحص اللوحات (المطابقة المباشرة الدقيقة)")
+st.title("⚡ نظام فحص اللوحات (الحل الجذري الشامل)")
 st.markdown("---")
 
 def parse_plate(text):
@@ -126,7 +126,7 @@ if uploaded_file:
                 let currentText = finalTranscript || interimTranscript;
                 if (currentText.trim() !== "") {{
                     document.getElementById('liveText').innerText = currentText;
-                    findDirectMatch(currentText);
+                    findAbsoluteMatch(currentText);
                 }}
             }};
         }}
@@ -150,7 +150,7 @@ if uploaded_file:
             resultBox.style.display = 'none';
         }}
 
-        function findDirectMatch(phrase) {{
+        function findAbsoluteMatch(phrase) {{
             let t = phrase;
             
             // تحويل الأرقام العربية الهندية إلى إنجليزية
@@ -168,14 +168,15 @@ if uploaded_file:
                  .replace(/تمانية|ثمانية|ثامنه|تمنيه|ثمان/g, "8")
                  .replace(/تسعة|تسعه|تسع/g, "9");
 
-            // تصحيح نطق الحروف الشائع (مثل باسل)
+            // تصحيح نطق الحروف الشائع
             t = t.replace(/بسلام|باسلام|بصل|باسيل|بأسين|باسين|باء سين|با سين|باء سين لام|باسين لام|بس ل|افلام|أفلام/g, "بسل");
 
-            // استخراج الأرقام وترتيبها (لتجاوز تبديل الخانات تماماً)
+            // استخراج الأرقام وترتيبها تصاعدياً (لتجاوز تبديل الخانات)
             let inputDigitsSorted = (t.match(/[0-9]/g) || []).sort().join("");
             
-            // استخراج الحروف المتاحة وتنظيفها من الفراغات
-            let inputLetters = (t.match(/[\\u0600-\\u06FF]/g) || []).join("").replace(/\\s+/g, '');
+            // استخراج الحروف وإزالة المسافات تماماً وعمل توحيد كامل
+            let inputLettersRaw = (t.match(/[\\u0600-\\u06FF]/g) || []).join("");
+            let inputLettersClean = inputLettersRaw.replace(/\\s+/g, '').split('').sort().join('');
 
             let resultBox = document.getElementById('resultBox');
             let platesListDiv = document.getElementById('platesList');
@@ -185,20 +186,21 @@ if uploaded_file:
 
             plateDB.forEach(p => {{
                 let targetDigitsSorted = p.digits ? p.digits.split('').sort().join('') : "";
-                let cleanTargetLetters = p.letters ? p.letters.replace(/\\s+/g, '') : "";
+                let targetLettersClean = p.letters ? p.letters.replace(/\\s+/g, '').split('').sort().join('') : "";
 
-                // التحقق من وجود الحروف والأرقام بغض النظر عن ترتيب نطق الأرقام
-                let hasLetters = (inputLetters.includes("بسل") && cleanTargetLetters.includes("بسل")) || (inputLetters === cleanTargetLetters);
+                // الحل الجذري: مقارنة الأرقام المرتبة والحروف المزالة منها المسافات والمرتبة
                 let digitsMatch = (inputDigitsSorted !== "" && inputDigitsSorted === targetDigitsSorted);
+                let lettersMatch = (inputLettersClean !== "" && targetLettersClean !== "" && (targetLettersClean.includes(inputLettersClean) || inputLettersClean.includes(targetLettersClean) || inputLettersClean === targetLettersClean));
 
-                if (hasLetters && digitsMatch) {{
+                // إذا كانت الأرقام مطابقة تماماً (حتى لو مبدلة) والحروف متقاربة/متطابقة
+                if (digitsMatch && (lettersMatch || inputLettersClean.includes("بسل") && targetLettersClean.includes("بسل"))) {{
                     matchedCount++;
                     let item = document.createElement('div');
                     item.className = 'plate-item';
                     item.innerText = '📌 ' + p.original;
                     platesListDiv.appendChild(item);
                 }}
-            }});
+            }));
 
             resultBox.style.display = 'block';
             if (matchedCount === 0) {{
