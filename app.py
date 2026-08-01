@@ -166,15 +166,15 @@ if uploaded_file:
                  .replace(/تمانية|ثمانية|ثامنه|تمنيه/g, "8")
                  .replace(/تسعة|تسعه/g, "9");
 
-            // تصحيح أي خطأ إملائي لنطق الحروف (بصل / باسيل / بأسين / باسين / افلام) إلى الاختصار الأساسي
-            t = t.replace(/بصل|باسيل|بأسين|باسين|باء سين|با سين|باء سين لام|باسين لام|بس ل|افلام|أفلام/g, "بسل");
+            // تصحيح كافة أخطاء المتصفح لنطق الحروف
+            t = t.replace(/بسلام|باسلام|بصل|باسيل|بأسين|باسين|باء سين|با سين|باء سين لام|باسين لام|بس ل|افلام|أفلام/g, "بسل");
 
-            // استخراج الأرقام وترتيبها لتجاوز تبديل الخانات (مثل 4674 و 4764)
+            // استخراج الأرقام وترتيبها تماماً لتجاوز مشكلة تبديل خانات النطق
             let inputDigitsSorted = (t.match(/[0-9]/g) || []).sort().join("");
             
             // استخراج الحروف وتنقيتها
             let inputLetters = (t.match(/[\\u0600-\\u06FF]/g) || []).join("").replace(/\\s+/g, '');
-            inputLetters = inputLetters.replace(/ي/g, '');
+            inputLetters = inputLetters.replace(/[اأإآىيؤئةو]/g, '');
 
             let resultBox = document.getElementById('resultBox');
             resultBox.style.display = 'block';
@@ -182,11 +182,12 @@ if uploaded_file:
             let matched = null;
 
             plateDB.forEach(p => {{
+                // ترتيب أرقام اللوحة المخزنة في الملف أيضاً لضمان المطابقة المطلقة بغض النظر عن ترتيب النطق
                 let targetDigitsSorted = p.digits ? p.digits.split('').sort().join('') : "";
-                let cleanTargetLetters = p.letters ? p.letters.replace(/\\s+/g, '').replace(/ي/g, '') : "";
+                let cleanTargetLetters = p.letters ? p.letters.replace(/\\s+/g, '').replace(/[اأإآىيؤئةو]/g, '') : "";
 
                 let digitsMatch = (inputDigitsSorted !== "" && inputDigitsSorted === targetDigitsSorted);
-                let lettersMatch = (inputLetters.includes("بسل") && cleanTargetLetters === "بسل") || (inputLetters === cleanTargetLetters) || (cleanTargetLetters === "" && inputLetters === "");
+                let lettersMatch = (inputLetters.includes("بسل".replace(/[اأإآىيؤئةو]/g, '')) && cleanTargetLetters.includes("بسل".replace(/[اأإآىيؤئةو]/g, ''))) || (inputLetters === cleanTargetLetters) || (cleanTargetLetters === "" && inputLetters === "");
 
                 if (digitsMatch && lettersMatch) {{
                     matched = p;
