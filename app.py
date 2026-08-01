@@ -17,14 +17,20 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ نظام الفحص والإملاء الفوري السريع")
+st.title("⚡ نظام فحص لوحات السيارات الذكي")
 st.markdown("---")
 
-def extract_digits_and_letters(text):
+def clean_and_parse(text):
     if not text:
         return "", ""
     text = str(text).strip()
     
+    # تحويل الأرقام العربية إلى إنجليزية
+    arabic_digits = "٠١٢٣٤٥٦٧٨٩"
+    english_digits = "0123456789"
+    text = text.translate(str.maketrans(arabic_digits, english_digits))
+    
+    # قاموس أسماء الحروف
     letter_map = {
         'ألف': 'ا', 'الف': 'ا', 'باء': 'ب', 'با': 'ب', 'تاء': 'ت', 'تا': 'ت',
         'ثاء': 'ث', 'ثا': 'ث', 'جيم': 'ج', 'حاء': 'ح', 'حا': 'ح', 'خاء': 'خ', 'خا': 'خ',
@@ -36,18 +42,17 @@ def extract_digits_and_letters(text):
         'هاء': 'ه', 'ها': 'ه', 'واو': 'و', 'ياء': 'ي', 'يا': 'ي'
     }
     
-    arabic_digits = "٠١٢٣٤٥٦٧٨٩"
-    english_digits = "0123456789"
-    text = text.translate(str.maketrans(arabic_digits, english_digits))
-    
     words = text.split()
     converted_words = [letter_map.get(w, w) for w in words]
-    clean_str = "".join(converted_words)
+    full_str = "".join(converted_words)
     
-    letters = "".join(re.findall(r'[أ-يa-zA-Z]', clean_str))
-    digits = "".join(re.findall(r'[0-9]', clean_str))
+    # استخراج كل الحروف العربية/الإنجليزية والأرقام
+    letters = "".join(re.findall(r'[أ-يa-zA-Z]', full_str))
+    digits = "".join(re.findall(r'[0-9]', full_str))
     
-    return letters, digits
+    # لوحة السيارة تأخذ أول 3 حروف فقط
+    clean_letters = letters[:3]
+    return clean_letters, digits
 
 uploaded_file = st.file_uploader("اختر ملف الإكسيل (Excel)", type=["xlsx", "xls"])
 
@@ -59,18 +64,18 @@ if uploaded_file:
     plate_database = []
     
     for plate in raw_plates:
-        letters, digits = extract_digits_and_letters(plate)
-        if letters or digits:
+        letters, digits = clean_and_parse(plate)
+        if digits:
             plate_database.append({
                 'original': str(plate),
                 'letters': letters,
                 'digits': digits
             })
 
-    st.success(f"تم تحميل الملف بنجاح! عدد اللوحات: {len(plate_database)}")
+    st.success(f"تم فهرسة {len(plate_database)} لوحة بنجاح!")
     st.markdown("---")
 
-    st.subheader("🎙️ الاستماع المباشر الفوري:")
+    st.subheader("🎙️ الاستماع المباشر للوحات:")
 
     db_json = json.dumps(plate_database, ensure_ascii=False)
 
@@ -80,8 +85,9 @@ if uploaded_file:
         <div id="status" style="margin-top: 10px; color: #888; font-size: 14px;">الميكروفون متوقف</div>
         
         <div style="margin-top: 20px;">
-            <div style="font-size: 16px; color: #555;">الكلمة المنطوقة حالياً:</div>
+            <div style="font-size: 16px; color: #555;">النص المنطوق:</div>
             <div id="liveText" style="font-size: 26px; font-weight: bold; color: #007bff; min-height: 40px; margin: 10px 0;">-</div>
+            <div id="parsedText" style="font-size: 18px; color: #28a745; min-height: 25px;"></div>
         </div>
 
         <div id="resultBox" class="status-box" style="display:none;"></div>
@@ -104,7 +110,7 @@ if uploaded_file:
 
             recognition.onstart = function() {{
                 recognizing = true;
-                document.getElementById('status').innerText = "🎙️ الميكروفون يعمل.. انطق اللوحات طوالي!";
+                document.getElementById('status').innerText = "🎙️ الميكروفون يعمل.. انطق اللوحات بسلاسة!";
                 document.getElementById('toggleBtn').innerText = "⏹️ إيقاف الاستماع";
                 document.getElementById('toggleBtn').className = "mic-btn stop-btn";
             }};
@@ -158,28 +164,40 @@ if uploaded_file:
             let words = t.trim().split(/\\s+/);
             let converted = words.map(w => letterMap[w] || w).join("");
 
-            let letters = (converted.match(/[أ-يa-zA-Z]/g) || []).join("");
+            let rawLetters = (converted.match(/[أ-يa-zA-Z]/g) || []).join("");
             let digits = (converted.match(/[0-9]/g) || []).join("");
 
-            return {{ letters, digits }};
+            // تحجيم الحروف لأول 3 حروف عربية فقط (الخاصة باللوحة)
+            let cleanLetters = rawLetters.slice(0, 3);
+
+            return {{ letters: cleanLetters, digits: digits }};
+        }}
+
+        function countMatchingChars(str1, str2) {{
+            let count = 0;
+            for (let char of str1) {{
+                if (str2.includes(char)) count++;
+            }}
+            return count;
         }}
 
         function checkPlate(phrase) {{
             let spoken = parseSpoken(phrase);
             let resultBox = document.getElementById('resultBox');
+            let parsedDiv = document.getElementById('parsedText');
+            
+            parsedDiv.innerText = "التحليل: [حروف: " + (spoken.letters || "بدون") + " | أرقام: " + (spoken.digits || "بدون") + "]";
             resultBox.style.display = 'block';
 
-            if (!spoken.digits && !spoken.letters) return;
+            if (!spoken.digits) return;
 
-            // مطابقة مرنة: مطابقة الأرقام + توفر الحروف
+            // البحث الذكي: تطابق الأرقام أولاً ثم مقارنة الحروف المنطوقة
             let match = plateDB.find(p => {{
-                if (spoken.digits && p.digits === spoken.digits) {{
-                    if (!spoken.letters || p.letters.includes(spoken.letters) || spoken.letters.includes(p.letters)) {{
+                if (p.digits === spoken.digits) {{
+                    // إذا لم يتم التقاط حروف، أو كانت الأرقام مطابقة وحرفين على الأقل مطابقين
+                    if (!spoken.letters || countMatchingChars(spoken.letters, p.letters) >= 1) {{
                         return true;
                     }}
-                }}
-                if (spoken.letters && p.letters === spoken.letters && spoken.digits === p.digits) {{
-                    return true;
                 }}
                 return false;
             }});
@@ -210,4 +228,4 @@ if uploaded_file:
     </script>
     """
 
-    st.components.v1.html(components_code, height=350)
+    st.components.v1.html(components_code, height=380)
