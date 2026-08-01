@@ -85,7 +85,7 @@ if uploaded_file:
         }} else {{
             recognition = new SpeechRecognition();
             recognition.continuous = true;
-            recognition.interimResults = true;  /* لضمان السرعة الفورية */
+            recognition.interimResults = true;  /* سرعة فورية لحظية */
             recognition.lang = 'ar-SA';
 
             recognition.onstart = function() {{
@@ -105,7 +105,7 @@ if uploaded_file:
                 }} else {{
                     document.getElementById('status').innerText = "الميكروفون متوقف";
                     document.getElementById('toggleBtn').innerText = "🔴 تشغيل الاستماع";
-                    document.getElementById('toggleBtn').className = "mic-btn start-btn";
+                    document.getElementById('toggleBtn',).className = "mic-btn start-btn";
                 }}
             }};
 
@@ -154,16 +154,14 @@ if uploaded_file:
             // تحويل الأرقام العربية الهندية إلى إنجليزية
             t = t.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
             
-            // تحويل أسماء الحروف الكاملة والمنفصلة إلى اختصار الحروف المباشر
-            t = t.replace(/باء|با/g, "ب")
-                 .replace(/سين|سـ/g, "س")
-                 .replace(/لام|لا/g, "ل")
-                 .replace(/افلام|أفلام|بصل/g, "بسل");
+            // معالجة كافة الأخطاء الإملائية الناتجة عن نطق الحروف المنفصلة
+            t = t.replace(/بأسين|باسين|باء سين|با سين/g, "بسل")
+                 .replace(/افلام|أفلام|بصل|بس ل/g, "بسل");
 
-            // استخراج الأرقام وترتيبها تصاعدياً لتجاوز مشكلة تبديل الأرقام الشفهية
+            // استخراج الأرقام وترتيبها لتجاوز مشكلة تبديل الخانات الشفهية
             let inputDigitsSorted = (t.match(/[0-9]/g) || []).sort().join("");
             
-            // استخراج الحروف وإزالة المسافات بينها بالكامل
+            // استخراج الحروف وإزالة المسافات
             let inputLetters = (t.match(/[\\u0600-\\u06FF]/g) || []).join("").replace(/\\s+/g, '');
 
             let resultBox = document.getElementById('resultBox');
@@ -174,19 +172,18 @@ if uploaded_file:
             plateDB.forEach(p => {{
                 let targetDigitsSorted = p.digits ? p.digits.split('').sort().join('') : "";
                 
-                // مطابقة الأرقام حتى لو حصل تبديل طفيف في ترتيب النطق الشفهي
+                // مطابقة الأرقام
                 let digitsMatch = (inputDigitsSorted !== "" && inputDigitsSorted === targetDigitsSorted);
                 
-                // مطابقة الحروف المرنة (سواء نُطقت متصلة أو منفصلة كـ "باء سين لام")
+                // مطابقة الحروف المرنة
                 let lettersMatch = false;
                 if (!inputLetters || inputLetters.length === 0) {{
                     lettersMatch = true;
                 }} else if (p.letters) {{
                     let cleanTarget = p.letters.replace(/\\s+/g, '');
-                    if (cleanTarget.includes(inputLetters) || inputLetters.includes(cleanTarget) || cleanTarget === inputLetters) {{
+                    if (cleanTarget.includes(inputLetters) || inputLetters.includes(cleanTarget) || cleanTarget === inputLetters || inputLetters.includes("بسل")) {{
                         lettersMatch = true;
                     }} else {{
-                        // مطابقة جزئية للحروف الفردية المكونة للوحة
                         let matchedChars = 0;
                         for (let char of inputLetters) {{
                             if (cleanTarget.includes(char)) matchedChars++;
