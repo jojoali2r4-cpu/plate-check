@@ -8,17 +8,16 @@ st.set_page_config(page_title="فحص اللوحات الذكي الفوري", l
 st.markdown("""
     <style>
     body, div, h1, h2, h3, p { text-align: right; direction: rtl; }
-    .status-box { font-size: 26px !important; font-weight: bold; text-align: center; padding: 18px; border-radius: 12px; margin-top: 15px; }
-    .found-box { background-color: #f8d7da; color: #721c24; border: 3px solid #f5c6cb; }
-    .not-found-box { background-color: #d4edda; color: #155724; border: 3px solid #c3e6cb; }
+    .status-box { font-size: 20px !important; font-weight: bold; text-align: right; padding: 15px; border-radius: 12px; margin-top: 15px; background-color: #f8f9fa; border: 2px solid #ccc; color: #333; }
     .mic-btn { font-size: 18px; padding: 12px 24px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; margin: 5px; width: 48%; }
     .start-btn { background-color: #28a745; color: white; }
     .stop-btn { background-color: #dc3545; color: white; }
     .clear-btn { background-color: #6c757d; color: white; }
+    .plate-item { background: #e2f0d9; padding: 10px; margin: 5px 0; border-radius: 6px; font-weight: bold; color: #274e13; font-size: 22px; }
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ نظام فحص اللوحات الفوري (النسخة الخارقة المحدثة)")
+st.title("⚡ نظام فحص اللوحات (عرض المتشابهة مباشرة)")
 st.markdown("---")
 
 def parse_plate(text):
@@ -70,7 +69,10 @@ if uploaded_file:
             <div id="liveText" style="font-size: 26px; font-weight: bold; color: #007bff; min-height: 35px;">-</div>
         </div>
 
-        <div id="resultBox" class="status-box" style="display:none;"></div>
+        <div id="resultBox" class="status-box" style="display:none;">
+            <div style="font-weight: bold; margin-bottom: 8px; color: #111;">اللوحات القريبة أو المطابقة بالملف:</div>
+            <div id="platesList"></div>
+        </div>
     </div>
 
     <script>
@@ -124,7 +126,7 @@ if uploaded_file:
                 let currentText = finalTranscript || interimTranscript;
                 if (currentText.trim() !== "") {{
                     document.getElementById('liveText').innerText = currentText;
-                    matchUltimateEngine(currentText);
+                    findSimilarPlates(currentText);
                 }}
             }};
         }}
@@ -148,13 +150,13 @@ if uploaded_file:
             resultBox.style.display = 'none';
         }}
 
-        function matchUltimateEngine(phrase) {{
+        function findSimilarPlates(phrase) {{
             let t = phrase;
             
             // تحويل الأرقام العربية الهندية إلى إنجليزية
             t = t.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
             
-            // تحويل الكلمات المنطوقة للأرقام إلى قيم رقمية
+            // تحويل كلمات الأرقام إلى قيم رقمية
             t = t.replace(/صفر/g, "0")
                  .replace(/واحد/g, "1")
                  .replace(/اتنين|ثثنين|اثنين/g, "2")
@@ -166,21 +168,21 @@ if uploaded_file:
                  .replace(/تمانية|ثمانية|ثامنه|تمنيه|ثمان/g, "8")
                  .replace(/تسعة|تسعه|تسع/g, "9");
 
-            // توحيد الحروف مهما كتبها المتصفح (بسلام، بصل، باسيل، إلخ)
+            // توحيد الحروف
             t = t.replace(/بسلام|باسلام|بصل|باسيل|بأسين|باسين|باء سين|با سين|باء سين لام|باسين لام|بس ل|افلام|أفلام/g, "بسل");
 
-            // استخراج جميع الأرقام الموجودة في النص وترتيبها تصاعدياً لتجاوز مشكلة تبديل الخانات نهائياً
+            // استخراج الأرقام وترتيبها بغض النظر عن تبديل الخانات
             let inputDigitsArray = t.match(/[0-9]/g) || [];
             let inputDigitsSorted = inputDigitsArray.sort().join("");
             
-            // استخراج وتصفية الحروف
             let inputLetters = (t.match(/[\\u0600-\\u06FF]/g) || []).join("").replace(/\\s+/g, '');
             inputLetters = inputLetters.replace(/[اأإآىيؤئةو]/g, '');
 
             let resultBox = document.getElementById('resultBox');
-            resultBox.style.display = 'block';
+            let platesListDiv = document.getElementById('platesList');
+            platesListDiv.innerHTML = "";
 
-            let matched = null;
+            let matchedCount = 0;
 
             plateDB.forEach(p => {{
                 let targetDigitsArray = p.digits ? p.digits.split('') : [];
@@ -188,38 +190,27 @@ if uploaded_file:
                 
                 let cleanTargetLetters = p.letters ? p.letters.replace(/\\s+/g, '').replace(/[اأإآىيؤئةو]/g, '') : "";
 
-                // المطابقة النهائية للأرقام (بترتيب مرن) والحروف (بشكل شامل)
+                // شرط العرض: مطابقة الأرقام (حتى لو مبدلة) أو تشابه الحروف الكلي
                 let digitsMatch = (inputDigitsSorted !== "" && inputDigitsSorted === targetDigitsSorted);
                 let lettersMatch = (inputLetters.includes("بسل".replace(/[اأإآىيؤئةو]/g, '')) && cleanTargetLetters.includes("بسل".replace(/[اأإآىيؤئةو]/g, ''))) || (inputLetters === cleanTargetLetters) || (cleanTargetLetters === "" && inputLetters === "");
 
-                if (digitsMatch && lettersMatch) {{
-                    matched = p;
+                if (digitsMatch || (inputDigitsSorted === "" && lettersMatch)) {{
+                    matchedCount++;
+                    let item = document.createElement('div');
+                    item.className = 'plate-item';
+                    item.innerText = '📌 ' + p.original;
+                    platesListDiv.appendChild(item);
                 }}
             }});
 
-            if (matched) {{
-                resultBox.className = 'status-box found-box';
-                resultBox.innerHTML = '⚠️ اللوحة موجودة بالملف: (' + matched.original + ')';
-                if ("vibrate" in navigator) {{ navigator.vibrate([300, 100, 300]); }}
-                playBeep();
+            resultBox.style.display = 'block';
+            if (matchedCount === 0) {{
+                platesListDiv.innerHTML = '<div style="color: #dc3545; font-weight: bold;">❌ لا توجد لوحة مطابقة تماماً، تأكد من النطق.</div>';
             }} else {{
-                resultBox.className = 'status-box not-found-box';
-                resultBox.innerHTML = '✅ غير موجودة';
+                if ("vibrate" in navigator) {{ navigator.vibrate(200); }}
             }}
-        }}
-
-        function playBeep() {{
-            try {{
-                var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                var osc = audioCtx.createOscillator();
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(880, audioCtx.currentTime);
-                osc.connect(audioCtx.destination);
-                osc.start();
-                osc.stop(audioCtx.currentTime + 0.3);
-            }} catch(e) {{}}
         }}
     </script>
     """
 
-    st.components.v1.html(components_code, height=380)
+    st.components.v1.html(components_code, height=450)
