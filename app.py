@@ -18,8 +18,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ نظام فحص اللوحات الفوري")
-st.caption("الاستماع الدقيق للجملة الأخيرة فقط لمنع التكرار")
+st.title("⚡ نظام فحص اللوحات الفوري (المطور)")
+st.caption("تعرف متقدم على الحروف المحكية وتحويل الكلمات الرقمية")
 st.markdown("---")
 
 def parse_plate(text):
@@ -142,8 +142,23 @@ if uploaded_file:
             resultBox.style.display = 'none';
         }}
 
-        function normalizeArabicLetters(text) {{
-            let t = text;
+        // تحويل الأرقام المنطوقة ككلمات إلى أرقام ومعالجة أسماء الحروف
+        function cleanSpokenText(text) {{
+            let t = text.toLowerCase();
+            
+            // تحويل الكلمات الرقمية إلى أرقام
+            const wordToNum = {{
+                "صفر": "0", "واحد": "1", "اثنان": "2", "اتنين": "2", "ثلاثة": "3", "تلاتة": "3",
+                "أربعة": "4", "اربعة": "4", "خمسة": "5", "ستة": "6", "سبعة": "7", "ثمانية": "8",
+                "تمانية": "8", "تسعة": "9"
+            }};
+            
+            for (let word in wordToNum) {{
+                let reg = new RegExp(word, 'g');
+                t = t.replace(reg, wordToNum[word]);
+            }}
+
+            // استبدال أسماء الحروف بأحرفها
             t = t.replace(/أفلام|افلام|بصل/g, "بسل")
                  .replace(/ألف|الف/g, "أ")
                  .replace(/باء|با/g, "ب")
@@ -173,14 +188,16 @@ if uploaded_file:
                  .replace(/هاء|ها/g, "هـ")
                  .replace(/واو/g, "و")
                  .replace(/ياء|يا|ياسين/g, "ي");
+                 
             return t;
         }}
 
         function matchFuzzy(phrase) {{
-            let converted = phrase.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
+            let cleaned = cleanSpokenText(phrase);
+            let converted = cleaned.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
+            
             let inputDigits = (converted.match(/[0-9]/g) || []).join("");
-            let normalizedText = normalizeArabicLetters(converted);
-            let inputLetters = (normalizedText.match(/[\u0600-\u06FF]/g) || []).join("").replace(/\s+/g, '');
+            let inputLetters = (converted.match(/[\u0600-\u06FF]/g) || []).join("").replace(/\s+/g, '');
 
             let resultBox = document.getElementById('resultBox');
             resultBox.style.display = 'block';
@@ -191,13 +208,24 @@ if uploaded_file:
                 let lettersMatch = false;
                 let digitsMatch = false;
 
-                if (!inputLetters || (p.letters && (inputLetters.includes(p.letters) || p.letters.includes(inputLetters)))) {{
-                    lettersMatch = true;
+                // مطابقة الحروف المرنة
+                if (!inputLetters || inputLetters.length === 0) {{
+                    lettersMatch = true; 
+                }} else if (p.letters) {{
+                    let matchingChars = 0;
+                    for (let char of p.letters) {{
+                        if (inputLetters.includes(char)) matchingChars++;
+                    }}
+                    if (matchingChars >= Math.min(2, p.letters.length)) {{
+                        lettersMatch = true;
+                    }}
                 }}
 
+                // مطابقة الأرقام بحسب وجود الأرقام الأساسية
                 if (inputDigits && p.digits) {{
                     let sortedInput = inputDigits.split('').sort().join('');
                     let sortedTarget = p.digits.split('').sort().join('');
+                    
                     if (sortedInput === sortedTarget || inputDigits.includes(p.digits) || p.digits.includes(inputDigits)) {{
                         digitsMatch = true;
                     }}
