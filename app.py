@@ -169,7 +169,6 @@ if uploaded_file:
             return t;
         }}
 
-        // حساب مسافة التعديل لتحديد مدى التشابه
         function getSimilarity(s1, s2) {{
             let longer = s1;
             let shorter = s2;
@@ -201,7 +200,7 @@ if uploaded_file:
                     }}
                 }}
                 if (i > 0) costs[s2.length] = lastValue;
-            }
+            }}
             return costs[s2.length];
         }}
 
@@ -218,24 +217,20 @@ if uploaded_file:
             let matched = null;
             let maxScore = 0;
 
-            // تقييم التشابه الذكي لكل اللوحات في القاعدة
             plateDB.forEach(p => {{
                 let letterScore = 0;
                 let digitScore = 0;
 
-                // 1. تقييم الحروف
                 if (inputLetters && p.letters) {{
                     letterScore = getSimilarity(inputLetters, p.letters);
                 }}
 
-                // 2. تقييم الأرقام (تأخذ في الاعتبار ترتيب الأرقام المتشابهة)
                 if (inputDigits && p.digits) {{
                     let exactDigits = getSimilarity(inputDigits, p.digits);
                     let sortedDigits = getSimilarity(inputDigits.split('').sort().join(''), p.digits.split('').sort().join(''));
                     digitScore = Math.max(exactDigits, sortedDigits);
                 }}
 
-                // النتيجة المركبة: تشترط تطابق الحروف مع مرونة في الأرقام
                 if (letterScore >= 0.6 && digitScore >= 0.7) {{
                     let totalScore = (letterScore * 0.5) + (digitScore * 0.5);
                     if (totalScore > maxScore) {{
