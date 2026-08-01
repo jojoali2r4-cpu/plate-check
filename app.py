@@ -76,87 +76,85 @@ if uploaded_file:
     </div>
 
     <script>
-        const plateDB = {db_json};
+        const plateDB = """ + db_json + """;
         let recognizing = false;
         let recognition;
 
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-        if (!SpeechRecognition) {{
+        if (!SpeechRecognition) {
             document.getElementById('status').innerText = "المتصفح لا يدعم التحدث الصوتي.";
-        }} else {{
+        } else {
             recognition = new SpeechRecognition();
             recognition.continuous = true;
             recognition.interimResults = true;
             recognition.lang = 'ar-SA';
 
-            recognition.onstart = function() {{
+            recognition.onstart = function() {
                 recognizing = true;
                 document.getElementById('status').innerText = "🎙️ يستمع الآن.. انطقي بسرعة!";
                 document.getElementById('toggleBtn').innerText = "⏹️ إيقاف الاستماع";
                 document.getElementById('toggleBtn').className = "mic-btn stop-btn";
-            }};
+            };
 
-            recognition.onerror = function(event) {{
+            recognition.onerror = function(event) {
                 console.log("Speech Error: ", event.error);
-            }};
+            };
 
-            recognition.onend = function() {{
-                if (recognizing) {{
-                    try {{ recognition.start(); }} catch(e) {{}}
-                }} else {{
+            recognition.onend = function() {
+                if (recognizing) {
+                    try { recognition.start(); } catch(e) {}
+                } else {
                     document.getElementById('status').innerText = "الميكروفون متوقف";
                     document.getElementById('toggleBtn').innerText = "🔴 تشغيل الاستماع";
                     document.getElementById('toggleBtn').className = "mic-btn start-btn";
-                }}
-            }};
+                }
+            };
 
-            recognition.onresult = function(event) {{
+            recognition.onresult = function(event) {
                 let interimTranscript = '';
                 let finalTranscript = '';
 
-                for (let i = event.resultIndex; i < event.results.length; ++i) {{
-                    if (event.results[i].isFinal) {{
+                for (let i = event.resultIndex; i < event.results.length; ++i) {
+                    if (event.results[i].isFinal) {
                         finalTranscript += event.results[i][0].transcript;
-                    }} else {{
+                    } else {
                         interimTranscript += event.results[i][0].transcript;
-                    }}
-                }}
+                    }
+                }
 
                 let currentText = finalTranscript || interimTranscript;
-                if (currentText.trim() !== "") {{
+                if (currentText.trim() !== "") {
                     document.getElementById('liveText').innerText = currentText;
                     findAbsoluteMatch(currentText);
-                }}
-            }};
-        }}
+                }
+            };
+        }
 
-        function toggleSpeech() {{
-            if (recognizing) {{
+        function toggleSpeech() {
+            if (recognizing) {
                 recognizing = false;
                 recognition.stop();
-            }} else {{
-                try {{
+            } else {
+                try {
                     recognition.start();
-                }} catch(e) {{
+                } catch(e) {
                     console.log(e);
-                }}
-            }}
-        }}
+                }
+            }
+        }
 
-        function clearText() {{
+        function clearText() {
             document.getElementById('liveText').innerText = "-";
             let resultBox = document.getElementById('resultBox');
             resultBox.style.display = 'none';
-        }}
+        }
 
-        function findAbsoluteMatch(phrase) {{
+        function findAbsoluteMatch(phrase) {
             let t = phrase;
             
-            // تحويل الأرقام العربية الهندية إلى إنجليزية
             t = t.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
             
-            // تحويل الكلمات المنطوقة للأرقام إلى قيم رقمية حقيقية
             t = t.replace(/صفر/g, "0")
                  .replace(/واحد/g, "1")
                  .replace(/اتنين|ثثنين|اثنين/g, "2")
@@ -168,13 +166,10 @@ if uploaded_file:
                  .replace(/تمانية|ثمانية|ثامنه|تمنيه|ثمان/g, "8")
                  .replace(/تسعة|تسعه|تسع/g, "9");
 
-            // تصحيح نطق الحروف الشائع
             t = t.replace(/بسلام|باسلام|بصل|باسيل|بأسين|باسين|باء سين|با سين|باء سين لام|باسين لام|بس ل|افلام|أفلام/g, "بسل");
 
-            // استخراج الأرقام وترتيبها تصاعدياً (لتجاوز تبديل الخانات)
             let inputDigitsSorted = (t.match(/[0-9]/g) || []).sort().join("");
             
-            // استخراج الحروف وإزالة المسافات تماماً وعمل توحيد كامل
             let inputLettersRaw = (t.match(/[\\u0600-\\u06FF]/g) || []).join("");
             let inputLettersClean = inputLettersRaw.replace(/\\s+/g, '').split('').sort().join('');
 
@@ -184,31 +179,29 @@ if uploaded_file:
 
             let matchedCount = 0;
 
-            plateDB.forEach(p => {{
+            plateDB.forEach(p => {
                 let targetDigitsSorted = p.digits ? p.digits.split('').sort().join('') : "";
                 let targetLettersClean = p.letters ? p.letters.replace(/\\s+/g, '').split('').sort().join('') : "";
 
-                // الحل الجذري: مقارنة الأرقام المرتبة والحروف المزالة منها المسافات والمرتبة
                 let digitsMatch = (inputDigitsSorted !== "" && inputDigitsSorted === targetDigitsSorted);
                 let lettersMatch = (inputLettersClean !== "" && targetLettersClean !== "" && (targetLettersClean.includes(inputLettersClean) || inputLettersClean.includes(targetLettersClean) || inputLettersClean === targetLettersClean));
 
-                // إذا كانت الأرقام مطابقة تماماً (حتى لو مبدلة) والحروف متقاربة/متطابقة
-                if (digitsMatch && (lettersMatch || inputLettersClean.includes("بسل") && targetLettersClean.includes("بسل"))) {{
+                if (digitsMatch && (lettersMatch || inputLettersClean.includes("بسل") && targetLettersClean.includes("بسل"))) {
                     matchedCount++;
                     let item = document.createElement('div');
                     item.className = 'plate-item';
                     item.innerText = '📌 ' + p.original;
                     platesListDiv.appendChild(item);
-                }}
-            }));
+                }
+            });
 
             resultBox.style.display = 'block';
-            if (matchedCount === 0) {{
+            if (matchedCount === 0) {
                 platesListDiv.innerHTML = '<div style="color: #dc3545; font-weight: bold;">❌ لا توجد لوحة مطابقة بالملف.</div>';
-            }} else {{
-                if ("vibrate" in navigator) {{ navigator.vibrate(200); }}
-            }}
-        }}
+            } else {
+                if ("vibrate" in navigator) { navigator.vibrate(200); }
+            }
+        }
     </script>
     """
 
