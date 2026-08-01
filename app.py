@@ -18,8 +18,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ نظام فحص اللوحات الفوري (المطور)")
-st.caption("تعرف متقدم على الحروف المحكية وتحويل الكلمات الرقمية")
+st.title("⚡ نظام فحص اللوحات الفوري")
+st.caption("معالجة متقدمة لأسماء الحروف ومطابقة خوارزمية الأرقام المتقطعة")
 st.markdown("---")
 
 def parse_plate(text):
@@ -142,26 +142,17 @@ if uploaded_file:
             resultBox.style.display = 'none';
         }}
 
-        // تحويل الأرقام المنطوقة ككلمات إلى أرقام ومعالجة أسماء الحروف
         function cleanSpokenText(text) {{
-            let t = text.toLowerCase();
+            let t = text;
             
-            // تحويل الكلمات الرقمية إلى أرقام
-            const wordToNum = {{
-                "صفر": "0", "واحد": "1", "اثنان": "2", "اتنين": "2", "ثلاثة": "3", "تلاتة": "3",
-                "أربعة": "4", "اربعة": "4", "خمسة": "5", "ستة": "6", "سبعة": "7", "ثمانية": "8",
-                "تمانية": "8", "تسعة": "9"
-            }};
-            
-            for (let word in wordToNum) {{
-                let reg = new RegExp(word, 'g');
-                t = t.replace(reg, wordToNum[word]);
-            }}
+            // تحويل الأرقام العربية الهندية إلى أرقام إنجليزية
+            t = t.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
 
-            // استبدال أسماء الحروف بأحرفها
-            t = t.replace(/أفلام|افلام|بصل/g, "بسل")
+            // استبدال أسماء الحروف الصريحة بالحرف المباشر
+            t = t.replace(/باء|با/g, "ب")
+                 .replace(/سين|سـ/g, "س")
+                 .replace(/لام|لا/g, "ل")
                  .replace(/ألف|الف/g, "أ")
-                 .replace(/باء|با/g, "ب")
                  .replace(/تاء|تا/g, "ت")
                  .replace(/ثاء|ثا/g, "ث")
                  .replace(/جيم/g, "ج")
@@ -171,7 +162,6 @@ if uploaded_file:
                  .replace(/ذال/g, "ذ")
                  .replace(/راء|را/g, "ر")
                  .replace(/زاي|زين/g, "ز")
-                 .replace(/سين/g, "س")
                  .replace(/شين/g, "ش")
                  .replace(/صاد/g, "ص")
                  .replace(/ضاد/g, "ض")
@@ -182,22 +172,21 @@ if uploaded_file:
                  .replace(/فاء|فا/g, "ف")
                  .replace(/قاف/g, "ق")
                  .replace(/كاف/g, "ك")
-                 .replace(/لام/g, "ل")
                  .replace(/ميم/g, "م")
                  .replace(/نون/g, "ن")
                  .replace(/هاء|ها/g, "هـ")
                  .replace(/واو/g, "و")
-                 .replace(/ياء|يا|ياسين/g, "ي");
-                 
+                 .replace(/ياء|يا/g, "ي");
+
             return t;
         }}
 
         function matchFuzzy(phrase) {{
             let cleaned = cleanSpokenText(phrase);
-            let converted = cleaned.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
             
-            let inputDigits = (converted.match(/[0-9]/g) || []).join("");
-            let inputLetters = (converted.match(/[\u0600-\u06FF]/g) || []).join("").replace(/\s+/g, '');
+            // استخراج الأرقام والحروف بعد التنظيف
+            let inputDigits = (cleaned.match(/[0-9]/g) || []).join("");
+            let inputLetters = (cleaned.match(/[\u0600-\u06FF]/g) || []).join("").replace(/\s+/g, '');
 
             let resultBox = document.getElementById('resultBox');
             resultBox.style.display = 'block';
@@ -208,24 +197,26 @@ if uploaded_file:
                 let lettersMatch = false;
                 let digitsMatch = false;
 
-                // مطابقة الحروف المرنة
+                // 1. مطابقة الحروف (سواء كانت بسل أو ب س ل متفرقة)
                 if (!inputLetters || inputLetters.length === 0) {{
-                    lettersMatch = true; 
+                    lettersMatch = true;
                 }} else if (p.letters) {{
-                    let matchingChars = 0;
+                    // التحقق من وجود الحروف بالكامل في النص المنطوق
+                    let matchCount = 0;
                     for (let char of p.letters) {{
-                        if (inputLetters.includes(char)) matchingChars++;
+                        if (inputLetters.includes(char)) matchCount++;
                     }}
-                    if (matchingChars >= Math.min(2, p.letters.length)) {{
+                    if (matchCount >= Math.min(2, p.letters.length)) {{
                         lettersMatch = true;
                     }}
                 }}
 
-                // مطابقة الأرقام بحسب وجود الأرقام الأساسية
+                // 2. مطابقة الأرقام (تتسامح مع تبديل الخانات مثل 4674 مقابل 4764)
                 if (inputDigits && p.digits) {{
                     let sortedInput = inputDigits.split('').sort().join('');
                     let sortedTarget = p.digits.split('').sort().join('');
                     
+                    // المطابقة إذا كانت نفس عناصر الأرقام أو إذا كان أحدهما يحتوي الآخر
                     if (sortedInput === sortedTarget || inputDigits.includes(p.digits) || p.digits.includes(inputDigits)) {{
                         digitsMatch = true;
                     }}
