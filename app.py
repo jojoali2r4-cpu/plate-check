@@ -3,7 +3,7 @@ import pandas as pd
 import re
 import json
 
-st.set_page_config(page_title="فحص اللوحات السريع", layout="wide")
+st.set_page_config(page_title="فحص اللوحات الذكي الفوري", layout="wide")
 
 st.markdown("""
     <style>
@@ -18,7 +18,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ نظام فحص اللوحات الفوري (النسخة السريعة جداً)")
+st.title("⚡ نظام فحص اللوحات الفوري (النسخة النهائية الدقيقة)")
 st.markdown("---")
 
 def parse_plate(text):
@@ -85,7 +85,7 @@ if uploaded_file:
         }} else {{
             recognition = new SpeechRecognition();
             recognition.continuous = true;
-            recognition.interimResults = true;  /* تفعيل القراءة الفورية لسرعة الاستجابة */
+            recognition.interimResults = true;  /* لضمان السرعة الفورية */
             recognition.lang = 'ar-SA';
 
             recognition.onstart = function() {{
@@ -124,7 +124,7 @@ if uploaded_file:
                 let currentText = finalTranscript || interimTranscript;
                 if (currentText.trim() !== "") {{
                     document.getElementById('liveText').innerText = currentText;
-                    matchFast(currentText);
+                    matchPerfect(currentText);
                 }}
             }};
         }}
@@ -148,16 +148,22 @@ if uploaded_file:
             resultBox.style.display = 'none';
         }}
 
-        function matchFast(phrase) {{
+        function matchPerfect(phrase) {{
             let t = phrase;
             
             // تحويل الأرقام العربية الهندية إلى إنجليزية
             t = t.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
             
-            // تصحيح الأخطاء الشائعة للمتصفح (مثل تحويل "افلام" أو "بصل" إلى "بسل")
-            t = t.replace(/افلام|أفلام|بصل|بس ل/g, "بسل");
+            // تحويل أسماء الحروف الكاملة والمنفصلة إلى اختصار الحروف المباشر
+            t = t.replace(/باء|با/g, "ب")
+                 .replace(/سين|سـ/g, "س")
+                 .replace(/لام|لا/g, "ل")
+                 .replace(/افلام|أفلام|بصل/g, "بسل");
 
-            let inputDigits = (t.match(/[0-9]/g) || []).join("");
+            // استخراج الأرقام وترتيبها تصاعدياً لتجاوز مشكلة تبديل الأرقام الشفهية
+            let inputDigitsSorted = (t.match(/[0-9]/g) || []).sort().join("");
+            
+            // استخراج الحروف وإزالة المسافات بينها بالكامل
             let inputLetters = (t.match(/[\\u0600-\\u06FF]/g) || []).join("").replace(/\\s+/g, '');
 
             let resultBox = document.getElementById('resultBox');
@@ -166,24 +172,28 @@ if uploaded_file:
             let matched = null;
 
             plateDB.forEach(p => {{
-                let digitsMatch = false;
+                let targetDigitsSorted = p.digits ? p.digits.split('').sort().join('') : "";
+                
+                // مطابقة الأرقام حتى لو حصل تبديل طفيف في ترتيب النطق الشفهي
+                let digitsMatch = (inputDigitsSorted !== "" && inputDigitsSorted === targetDigitsSorted);
+                
+                // مطابقة الحروف المرنة (سواء نُطقت متصلة أو منفصلة كـ "باء سين لام")
                 let lettersMatch = false;
-
-                // مطابقة الأرقام (تتجاوز تبديل الأرقام مثل 4674 و 4764)
-                if (inputDigits && p.digits) {{
-                    let sortedInput = inputDigits.split('').sort().join('');
-                    let sortedTarget = p.digits.split('').sort().join('');
-                    if (sortedInput === sortedTarget || p.digits.includes(inputDigits) || inputDigits.includes(p.digits)) {{
-                        digitsMatch = true;
-                    }}
-                }}
-
-                // مطابقة الحروف الفورية
                 if (!inputLetters || inputLetters.length === 0) {{
                     lettersMatch = true;
                 }} else if (p.letters) {{
-                    if (p.letters.includes(inputLetters) || inputLetters.includes(p.letters) || p.letters === inputLetters) {{
+                    let cleanTarget = p.letters.replace(/\\s+/g, '');
+                    if (cleanTarget.includes(inputLetters) || inputLetters.includes(cleanTarget) || cleanTarget === inputLetters) {{
                         lettersMatch = true;
+                    }} else {{
+                        // مطابقة جزئية للحروف الفردية المكونة للوحة
+                        let matchedChars = 0;
+                        for (let char of inputLetters) {{
+                            if (cleanTarget.includes(char)) matchedChars++;
+                        }}
+                        if (matchedChars >= Math.min(2, cleanTarget.length)) {{
+                            lettersMatch = true;
+                        }}
                     }}
                 }}
 
