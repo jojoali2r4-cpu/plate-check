@@ -17,8 +17,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ نظام فحص اللوحات الدقيق")
-st.caption("مطابقة ذكية مشتركة للحروف والأرقام لمنع نتائج الخاطئة")
+st.title("⚡ نظام فحص اللوحات الفوري (المطابقة الضبابية المرنة)")
+st.caption("مطابقة فائقة الذكاء تتعامل مع تبديل الأرقام والنطق المتقطع")
 st.markdown("---")
 
 def parse_plate(text):
@@ -117,7 +117,7 @@ if uploaded_file:
 
                 if (fullTranscript.trim() !== '') {{
                     document.getElementById('liveText').innerText = fullTranscript;
-                    matchSmart(fullTranscript);
+                    matchFuzzy(fullTranscript);
                 }}
             }};
         }}
@@ -169,50 +169,81 @@ if uploaded_file:
             return t;
         }}
 
-        // حساب نسبة التشابه لمنع الخلط بين أرقام مختلفة
-        function isDigitsSimilar(d1, d2) {{
-            if (d1 === d2) return true;
-            if (d1.length !== d2.length) return false;
-            // تصحيح الخطأ الشائع: تبديل 4674 مع 4764
-            if ((d1 === "4674" && d2 === "4764") || (d1 === "4764" && d2 === "4674")) return true;
-            
-            // سماح باختلاف رقم واحد فقط في الترتيب بشرط ان تكون بنفس الطول
-            let diffs = 0;
-            for (let i = 0; i < d1.length; i++) {{
-                if (d1[i] !== d2[i]) diffs++;
+        // حساب مسافة التعديل لتحديد مدى التشابه
+        function getSimilarity(s1, s2) {{
+            let longer = s1;
+            let shorter = s2;
+            if (s1.length < s2.length) {{
+                longer = s2;
+                shorter = s1;
             }}
-            return diffs <= 2 && d1.split('').sort().join('') === d2.split('').sort().join('');
+            let longerLength = longer.length;
+            if (longerLength === 0) return 1.0;
+            return (longerLength - editDistance(longer, shorter)) / parseFloat(longerLength);
         }}
 
-        function matchSmart(phrase) {{
+        function editDistance(s1, s2) {{
+            s1 = s1.toLowerCase();
+            s2 = s2.toLowerCase();
+            let costs = new Array();
+            for (let i = 0; i <= s1.length; i++) {{
+                let lastValue = i;
+                for (let j = 0; j <= s2.length; j++) {{
+                    if (i == 0) costs[j] = j;
+                    else {{
+                        if (j > 0) {{
+                            let newValue = costs[j - 1];
+                            if (s1.charAt(i - 1) != s2.charAt(j - 1))
+                                newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
+                            costs[j - 1] = lastValue;
+                            lastValue = newValue;
+                        }}
+                    }}
+                }}
+                if (i > 0) costs[s2.length] = lastValue;
+            }
+            return costs[s2.length];
+        }}
+
+        function matchFuzzy(phrase) {{
             let converted = phrase.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
-            let digits = (converted.match(/[0-9]/g) || []).join("");
+            let inputDigits = (converted.match(/[0-9]/g) || []).join("");
             
-            let letterText = normalizeArabicLetters(converted);
-            let letters = (letterText.match(/[\u0600-\u06FF]/g) || []).join("").replace(/\s+/g, '');
+            let normalizedText = normalizeArabicLetters(converted);
+            let inputLetters = (normalizedText.match(/[\u0600-\u06FF]/g) || []).join("").replace(/\s+/g, '');
 
             let resultBox = document.getElementById('resultBox');
             resultBox.style.display = 'block';
 
             let matched = null;
+            let maxScore = 0;
 
-            // 1. المطابقة بوجود الحروف + تشابه الأرقام (تمنع الخلط مع لوحات حروفها مختلفة مثل اهب6474)
-            if (letters && digits) {{
-                matched = plateDB.find(p => 
-                    (p.letters.includes(letters) || letters.includes(p.letters)) && 
-                    isDigitsSimilar(p.digits, digits)
-                );
-            }}
+            // تقييم التشابه الذكي لكل اللوحات في القاعدة
+            plateDB.forEach(p => {{
+                let letterScore = 0;
+                let digitScore = 0;
 
-            // 2. المطابقة بالرقم والحرف التام
-            if (!matched && digits && letters) {{
-                matched = plateDB.find(p => p.digits === digits && (p.letters.includes(letters) || letters.includes(p.letters)));
-            }}
+                // 1. تقييم الحروف
+                if (inputLetters && p.letters) {{
+                    letterScore = getSimilarity(inputLetters, p.letters);
+                }}
 
-            // 3. المطابقة بالأرقام فقط (شرط المطابقة التامة 100% لتجنب النتائج الخاطئة)
-            if (!matched && digits.length >= 4) {{
-                matched = plateDB.find(p => p.digits === digits);
-            }}
+                // 2. تقييم الأرقام (تأخذ في الاعتبار ترتيب الأرقام المتشابهة)
+                if (inputDigits && p.digits) {{
+                    let exactDigits = getSimilarity(inputDigits, p.digits);
+                    let sortedDigits = getSimilarity(inputDigits.split('').sort().join(''), p.digits.split('').sort().join(''));
+                    digitScore = Math.max(exactDigits, sortedDigits);
+                }}
+
+                // النتيجة المركبة: تشترط تطابق الحروف مع مرونة في الأرقام
+                if (letterScore >= 0.6 && digitScore >= 0.7) {{
+                    let totalScore = (letterScore * 0.5) + (digitScore * 0.5);
+                    if (totalScore > maxScore) {{
+                        maxScore = totalScore;
+                        matched = p;
+                    }}
+                }}
+            }});
 
             if (matched) {{
                 resultBox.className = 'status-box found-box';
