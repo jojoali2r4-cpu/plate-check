@@ -8,28 +8,30 @@ st.set_page_config(page_title="فحص اللوحات", layout="wide")
 st.markdown("""
     <style>
     body, div, h1, h2, h3, p { text-align: right; direction: rtl; }
-    .big-text { font-size: 26px !important; font-weight: bold; padding: 15px; border-radius: 10px; margin-bottom: 10px; }
-    .success-box { background-color: #d4edda; color: #155724; }
-    .danger-box { background-color: #f8d7da; color: #721c24; }
-    .warning-box { background-color: #fff3cd; color: #856404; }
+    .status-box { font-size: 32px !important; font-weight: bold; text-align: center; padding: 25px; border-radius: 15px; margin-top: 15px; }
+    .found-box { background-color: #f8d7da; color: #721c24; border: 3px solid #f5c6cb; }
+    .not-found-box { background-color: #d4edda; color: #155724; border: 3px solid #c3e6cb; }
     </style>
 """, unsafe_allow_html=True)
 
-st.title("📋 نظام فحص وإملاء اللوحات")
+st.title("📋 فحص اللوحات السريع")
 st.markdown("---")
 
 uploaded_file = st.file_uploader("اختر ملف الإكسيل (Excel)", type=["xlsx", "xls"])
 
 if uploaded_file:
     df = pd.read_excel(uploaded_file)
-    column_name = st.selectbox("اختر العمود الذي فيه أرقام/أسماء اللوحات:", df.columns)
+    column_name = st.selectbox("اختر عمود اللوحات:", df.columns)
+    
+    # تنظيف وقراءة اللوحات
     existing_plates = df[column_name].astype(str).str.strip().tolist()
     
     st.success(f"تم تحميل الملف! عدد اللوحات: {len(existing_plates)}")
     st.markdown("---")
 
-    st.subheader("🎤 الإملاء الصوتي:")
-    spoken_text = speech_to_text(language='ar-SA', start_prompt="🔴 اضغط للبدء والتحدث", stop_prompt="🟩 اضغط لإيقاف التسجيل", key='speech')
+    # خيار الإملاء الصوتي
+    st.subheader("🎤 إملاء اللوحة:")
+    spoken_text = speech_to_text(language='ar-SA', start_prompt="🔴 اضغط للبدء والتحدث", stop_prompt="🟩 إيقاف", key='speech')
 
     if 'current_text' not in st.session_state:
         st.session_state['current_text'] = ""
@@ -37,21 +39,30 @@ if uploaded_file:
     if spoken_text:
         st.session_state['current_text'] = spoken_text
 
-    input_plate = st.text_input("اللوحة المنطوقة (عدليها هنا إذا انكتبت غلط):", value=st.session_state['current_text'])
+    # خانة النص (يمكن استخدام ميكروفون لوحة المفاتيح فيها للإملاء المتواصل السريع)
+    input_plate = st.text_input("اللوحة المنطوقة (أو املاء مستمر عبر ميكروفون الكيبورد):", value=st.session_state['current_text'])
 
     if input_plate:
         input_cleaned = input_plate.strip()
-        st.markdown(f'<div class="big-text warning-box">اللوحة الحالية: {input_cleaned}</div>', unsafe_allow_html=True)
 
+        # الفحص المباشر
         if input_cleaned in existing_plates:
-            st.markdown(f'<div class="big-text danger-box">⚠️ تنبيه: اللوحة ({input_cleaned}) مكررة وموجودة بالملف!</div>', unsafe_allow_html=True)
-        else:
-            matches = process.extract(input_cleaned, existing_plates, scorer=fuzz.ratio, limit=3)
-            high_similarity = [m for m in matches if m[1] >= 80]
+            # تشغيل اهتزاز وصوت تنبيه للجوال عند وجود اللوحة
+            st.components.v1.html("""
+                <script>
+                    if ("vibrate" in navigator) {
+                        navigator.vibrate([300, 100, 300]); // اهتزاز
+                    }
+                    var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    var osc = audioCtx.createOscillator();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+                    osc.connect(audioCtx.destination);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.3);
+                </script>
+            """, height=0)
             
-            if high_similarity:
-                st.markdown(f'<div class="big-text warning-box">⚠️ تنبيه: اللوحة غير متطابقة تماماً لكن يوجد شبيه بها:</div>', unsafe_allow_html=True)
-                for m_text, score, _ in high_similarity:
-                    st.write(f"- **{m_text}** (نسبة التشابه: {int(score)}%)")
-            else:
-                st.markdown(f'<div class="big-text success-box">✅ اللوحة ({input_cleaned}) جديدة وغير مكررة.</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="status-box found-box">⚠️ اللوحة ({input_cleaned}) : موجودة</div>', unsafe_allow_html=True)
+        else:
+            st.markdown(f'<div class="status-box not-found-box">✅ اللوحة ({input_cleaned}) : غير موجودة</div>', unsafe_allow_html=True)
