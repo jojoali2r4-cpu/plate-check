@@ -3,26 +3,28 @@ import pandas as pd
 import re
 import json
 
-st.set_page_config(page_title="فحص اللوحات الدقيق", layout="wide")
+st.set_page_config(page_title="فحص اللوحات الذكي المجاني", layout="wide")
 
 st.markdown("""
     <style>
     body, div, h1, h2, h3, p { text-align: right; direction: rtl; }
-    .status-box { font-size: 30px !important; font-weight: bold; text-align: center; padding: 20px; border-radius: 15px; margin-top: 15px; }
+    .status-box { font-size: 28px !important; font-weight: bold; text-align: center; padding: 20px; border-radius: 15px; margin-top: 15px; }
     .found-box { background-color: #f8d7da; color: #721c24; border: 3px solid #f5c6cb; }
     .not-found-box { background-color: #d4edda; color: #155724; border: 3px solid #c3e6cb; }
-    .mic-btn { font-size: 20px; padding: 12px 24px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; }
+    .mic-btn { font-size: 20px; padding: 12px 24px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; width: 100%; }
     .start-btn { background-color: #28a745; color: white; }
     .stop-btn { background-color: #dc3545; color: white; }
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ نظام فحص اللوحات (الالتقاط الحرفي المباشر)")
+st.title("⚡ نظام فحص اللوحات المباشر (مجاني 100%)")
+st.caption("الاستماع العربي الفوري مع التصحيح الذكي لتخمينات المتصفح")
 st.markdown("---")
 
-def clean_plate(text):
+def parse_plate(text):
+    """تنظيف وتفكيك النص إلى أرقام وحروف"""
     if not text:
-        return ""
+        return "", ""
     text = str(text).strip()
     
     # تحويل الأرقام العربية إلى إنجليزية
@@ -30,8 +32,13 @@ def clean_plate(text):
     english_digits = "0123456789"
     text = text.translate(str.maketrans(arabic_digits, english_digits))
     
-    # إزالة أي مسافات أو رموز خاصة والإبقاء على الحروف والأرقام فقط
-    return re.sub(r'[^a-zA-Z0-9أ-ي]', '', text)
+    # استخراج الأرقام
+    digits = "".join(re.findall(r'[0-9]', text))
+    
+    # استخراج الحروف العربية فقط
+    letters = "".join(re.findall(r'[\u0600-\u06FF]', text))
+    
+    return letters, digits
 
 uploaded_file = st.file_uploader("اختر ملف الإكسيل (Excel)", type=["xlsx", "xls"])
 
@@ -40,55 +47,56 @@ if uploaded_file:
     column_name = st.selectbox("اختر عمود اللوحات:", df.columns)
     
     raw_plates = df[column_name].dropna().tolist()
-    plate_set = set()
-    plate_map = {}
+    plate_database = []
     
     for plate in raw_plates:
-        cleaned = clean_plate(plate)
-        if cleaned:
-            plate_set.add(cleaned)
-            plate_map[cleaned] = str(plate)
+        letters, digits = parse_plate(plate)
+        if digits:
+            plate_database.append({
+                'original': str(plate),
+                'letters': letters,
+                'digits': digits
+            })
 
-    st.success(f"تم تحميل {len(plate_set)} لوحة جاهزة للفحص!")
+    st.success(f"تم تحميل {len(plate_database)} لوحة بنجاح!")
     st.markdown("---")
 
-    st.subheader("🎙️ الاستماع المباشر:")
+    st.subheader("🎙️ الفحص الصوتي المباشر:")
+    st.write("اضغطي على الزر وابدئي بنطق اللوحات تباعاً دون توقف:")
 
-    db_json = json.dumps(list(plate_set), ensure_ascii=False)
-    map_json = json.dumps(plate_map, ensure_ascii=False)
+    db_json = json.dumps(plate_database, ensure_ascii=False)
 
     components_code = f"""
     <div style="direction: rtl; text-align: center; font-family: sans-serif;">
-        <button id="toggleBtn" class="mic-btn start-btn" onclick="toggleSpeech()">🔴 بدء الاستماع المستمر</button>
-        <div id="status" style="margin-top: 10px; color: #888; font-size: 14px;">الميكروفون متوقف</div>
+        <button id="toggleBtn" class="mic-btn start-btn" onclick="toggleSpeech()">🔴 تشغيل الاستماع المستمر</button>
+        <div id="status" style="margin-top: 10px; color: #666; font-size: 14px;">الميكروفون متوقف</div>
         
-        <div style="margin-top: 20px;">
-            <div style="font-size: 16px; color: #555;">المايك لقط بالضبط:</div>
-            <div id="liveText" style="font-size: 32px; font-weight: bold; color: #007bff; min-height: 45px; margin: 10px 0;">-</div>
+        <div style="margin-top: 15px; background: #f8f9fa; padding: 15px; border-radius: 10px;">
+            <div style="font-size: 14px; color: #555;">النص الملتقط من المتصفح:</div>
+            <div id="liveText" style="font-size: 24px; font-weight: bold; color: #007bff; min-height: 35px;">-</div>
         </div>
 
         <div id="resultBox" class="status-box" style="display:none;"></div>
     </div>
 
     <script>
-        const plateSet = new Set({db_json});
-        const plateMap = {map_json};
+        const plateDB = {db_json};
         let recognizing = false;
         let recognition;
 
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
         if (!SpeechRecognition) {{
-            document.getElementById('status').innerText = "المتصفح لا يدعم التحدث المباشر.";
+            document.getElementById('status').innerText = "المتصفح لا يدعم التحدث الصوتي المباشر.";
         }} else {{
             recognition = new SpeechRecognition();
             recognition.continuous = true;
             recognition.interimResults = true;
-            recognition.lang = 'ar-SA'; 
+            recognition.lang = 'ar-SA'; // اللغة العربية
 
             recognition.onstart = function() {{
                 recognizing = true;
-                document.getElementById('status').innerText = "🎙️ الميكروفون يعمل.. واصلي النطق طوالي!";
+                document.getElementById('status').innerText = "🎙️ الميكروفون يستمع الآن.. انطقي اللوحة!";
                 document.getElementById('toggleBtn').innerText = "⏹️ إيقاف الاستماع";
                 document.getElementById('toggleBtn').className = "mic-btn stop-btn";
             }};
@@ -98,20 +106,20 @@ if uploaded_file:
                     recognition.start();
                 }} else {{
                     document.getElementById('status').innerText = "الميكروفون متوقف";
-                    document.getElementById('toggleBtn').innerText = "🔴 بدء الاستماع المستمر";
+                    document.getElementById('toggleBtn').innerText = "🔴 تشغيل الاستماع المستمر";
                     document.getElementById('toggleBtn').className = "mic-btn start-btn";
                 }}
             }};
 
             recognition.onresult = function(event) {{
-                let currentSpeech = '';
+                let lastPhrase = '';
                 for (let i = event.resultIndex; i < event.results.length; ++i) {{
-                    currentSpeech = event.results[i][0].transcript;
+                    lastPhrase = event.results[i][0].transcript;
                 }}
 
-                if (currentSpeech.trim() !== '') {{
-                    document.getElementById('liveText').innerText = currentSpeech;
-                    checkDirect(currentSpeech);
+                if (lastPhrase.trim() !== '') {{
+                    document.getElementById('liveText').innerText = lastPhrase;
+                    matchSmart(lastPhrase);
                 }}
             }};
         }}
@@ -125,44 +133,30 @@ if uploaded_file:
             }}
         }}
 
-        function cleanString(str) {{
-            if (!str) return "";
-            // تحويل الأرقام الهندية لأرقام عالمية
-            let t = str.replace(/[٠١٢٣٤٥٦٧٨٩]/g, function(d) {{ return d.charCodeAt(0) - 1632; }});
-            // حذف كل المساحات والرموز
-            return t.replace(/[^a-zA-Z0-9أ-ي]/g, '');
-        }}
+        function matchSmart(phrase) {{
+            // تحويل الأرقام العربية إلى إنجليزية
+            let converted = phrase.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
+            
+            // استخراج الأرقام فقط
+            let digits = (converted.match(/[0-9]/g) || []).join("");
+            
+            // استخراج الحروف العربية
+            let letters = (converted.match(/[\u0600-\u06FF]/g) || []).join("");
 
-        function checkDirect(text) {{
-            let cleaned = cleanString(text);
             let resultBox = document.getElementById('resultBox');
+
+            if (!digits) return; // إذا لم يلقط أرقاماً ينظر الكلمة التالية
+
             resultBox.style.display = 'block';
 
-            if (!cleaned) return;
+            // المطابقة الذكية: تبدأ بالأرقام
+            let matched = plateDB.find(p => p.digits === digits);
 
-            // مطابقة مباشرة بالتعرف على النص الملتقط كما هو
-            let isFound = false;
-            let foundKey = "";
-
-            if (plateSet.has(cleaned)) {{
-                isFound = true;
-                foundKey = cleaned;
-            }} else {{
-                // فحص إذا كان النص المنطوق يحتوى على أي لوحة من الملف
-                for (let key of plateSet) {{
-                    if (cleaned.includes(key) || key.includes(cleaned)) {{
-                        isFound = true;
-                        foundKey = key;
-                        break;
-                    }}
-                }}
-            }}
-
-            if (isFound) {{
-                let originalName = plateMap[foundKey] || foundKey;
+            if (matched) {{
                 resultBox.className = 'status-box found-box';
-                resultBox.innerHTML = '⚠️ اللوحة موجودة بالملف: (' + originalName + ')';
+                resultBox.innerHTML = '⚠️ اللوحة موجودة بالملف: (' + matched.original + ')';
                 
+                // تنبيه اهتزاز وصوت
                 if ("vibrate" in navigator) {{ navigator.vibrate([300, 100, 300]); }}
                 playBeep();
             }} else {{
