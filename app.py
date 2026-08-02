@@ -159,7 +159,7 @@ if uploaded_file:
             // تحويل الأرقام العربية إلى إنجليزية
             t = t.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
             
-            // مطابقة الأرقام المنطوقة لفظياً بالترتيب
+            // مطابقة الأرقام المنطوقة لفظياً
             t = t.replace(/صفر/g, "0")
                  .replace(/واحد/g, "1")
                  .replace(/اتنين|ثثنين|اثنين/g, "2")
@@ -171,10 +171,8 @@ if uploaded_file:
                  .replace(/تمانية|ثمانية|ثامنه|تمنيه|ثمان/g, "8")
                  .replace(/تسعة|تسعه|تسع/g, "9");
 
-            // استخراج الأرقام والحفاظ على ترتيبها الأصلي تماماً
+            // استخراج وتجميع الأرقام والحروف مع معالجة التبديل الصوتي
             let inputDigits = (t.match(/[0-9]/g) || []).join("");
-            
-            // استخراج الحروف فقط وإزالة المسافات بينها مع الحفاظ على الترتيب الأصلي
             let inputLetters = (t.match(/[\\u0600-\\u06FF]/g) || []).join("").replace(/\\s+/g, '');
 
             let resultBox = document.getElementById('resultBox');
@@ -187,9 +185,27 @@ if uploaded_file:
                 let targetDigits = p.digits ? p.digits : "";
                 let targetLetters = p.letters ? p.letters.replace(/\\s+/g, '') : "";
 
-                // مطابقة دقيقة بالترتيب الأصلي للحروف والأرقام
-                let digitsMatch = (inputDigits !== "" && targetDigits.includes(inputDigits));
-                let lettersMatch = (inputLetters !== "" && targetLetters.includes(inputLetters));
+                // التحقق من تطابق الحروف بغض النظر عن المسافات أو الترتيب البسيط
+                let lettersMatch = false;
+                if (inputLetters !== "" && targetLetters !== "") {
+                    let matchCount = 0;
+                    for (let char of inputLetters) {
+                        if (targetLetters.includes(char)) matchCount++;
+                    }
+                    if (matchCount >= Math.min(inputLetters.length, targetLetters.length)) {
+                        lettersMatch = true;
+                    }
+                }
+
+                // التحقق من تطابق الأرقام حتى لو تم تبديل خاناتها بسبب خطأ النطق الصوتي
+                let digitsMatch = false;
+                if (inputDigits !== "" && targetDigits !== "") {
+                    let sortedInputDigits = inputDigits.split('').sort().join('');
+                    let sortedTargetDigits = targetDigits.split('').sort().join('');
+                    if (sortedInputDigits === sortedTargetDigits) {
+                        digitsMatch = true;
+                    }
+                }
 
                 if (digitsMatch && lettersMatch) {
                     matchedCount++;
