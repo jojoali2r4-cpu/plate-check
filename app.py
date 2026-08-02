@@ -15,7 +15,7 @@ st.markdown("""
     .stop-btn { background-color: #dc2626; color: white; }
     .clear-btn { background-color: #475569; color: white; }
     .plate-item { background: #dcfce7; border: 1px solid #86efac; padding: 14px; margin: 8px 0; border-radius: 8px; font-weight: bold; color: #166534; font-size: 26px; text-align: center; }
-    .interpreted-box { background: #eff6ff; border: 1px solid #bfdbfe; padding: 12px; border-radius: 8px; margin-top: 10px; color: #1e40af; font-size: 20px; font-weight: bold; }
+    .interpreted-box { background: #eff6ff; border: 1px solid #bfdbfe; padding: 12px; border-radius: 8px; margin-top: 10px; color: #1e40af; font-size: 20px; font-weight: bold; direction: ltr; text-align: right; unicode-bidi: plaintext; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -69,8 +69,8 @@ if uploaded_file:
         <div id="status" style="margin-top: 10px; color: #475569; font-size: 15px; font-weight: bold;">الميكروفون متوقف</div>
         
         <div class="interpreted-box">
-            <div style="font-size: 13px; color: #64748b; margin-bottom: 4px;">ما فهمه البرنامج من الصوت:</div>
-            <div id="liveText">-</div>
+            <div style="font-size: 13px; color: #64748b; margin-bottom: 4px; text-align: right;">ما فهمه البرنامج من الصوت:</div>
+            <div id="liveText" style="text-align: right;">-</div>
         </div>
 
         <div id="resultBox" class="status-box" style="display:none;">
@@ -140,7 +140,8 @@ if uploaded_file:
                     }
 
                     if (bestInterpreted) {
-                        document.getElementById('liveText').innerText = bestInterpreted;
+                        // إصلاح عرض النص المقلوب للمتصفح المحمول ليرتب الأرقام والحروف بشكل صحيح
+                        document.getElementById('liveText').innerText = fixDisplayOrder(bestInterpreted);
                     }
 
                     let uniquePlates = [...new Set(matchedResults)];
@@ -149,6 +150,18 @@ if uploaded_file:
                     }
                 };
             } catch(e) {}
+        }
+
+        function fixDisplayOrder(text) {
+            // فصل الأرقام وعكسها لتظهر صحيحة بصرياً في الموبايل
+            let digits = text.match(/[0-9]+/g);
+            if (digits) {
+                digits.forEach(d => {
+                    let correctedD = d.split('').reverse().join('');
+                    text = text.replace(d, correctedD);
+                });
+            }
+            return text;
         }
 
         function toggleSpeech() {
@@ -172,7 +185,6 @@ if uploaded_file:
             let t = text;
             t = t.replace(/[٠-٩]/g, function(d) { return "٠١٢٣٤٥٦٧٨٩".indexOf(d); });
             
-            // تحويل الأرقام اللفظية
             t = t.replace(/صفر|صيف/g, "0")
                  .replace(/واحد|واحده/g, "1")
                  .replace(/اتنين|ثثنين|اثنين|تنين/g, "2")
@@ -184,7 +196,6 @@ if uploaded_file:
                  .replace(/تمانية|ثمانية|ثامنه|تمنيه|ثمان/g, "8")
                  .replace(/تسعة|تسعه|تسع/g, "9");
 
-            // قاموس تصحيح وتحويل الكلمات والأسماء الكاملة إلى الحروف المطلوبة بدقة
             t = t.replace(/حسين|حسن|حسون|سين|سني/g, "س")
                  .replace(/رقية|رقبه|راء|رائيه/g, "ر")
                  .replace(/بهاء|باها|باء|بائيه/g, "ب")
@@ -206,7 +217,6 @@ if uploaded_file:
                  .replace(/طاس|طاء/g, "ط");
 
             let rawLetters = (t.match(/[\\u0600-\\u06FF]/g) || []).join("").replace(/\\s+/g, '');
-            // أخذ الحروف الثلاثة الأولى الناتجة
             let letters = rawLetters.length > 3 ? rawLetters.substring(0, 3) : rawLetters;
 
             let digits = (t.match(/[0-9]/g) || []).join("");
@@ -219,15 +229,16 @@ if uploaded_file:
 
         function smartMatch(inputLetters, inputDigits) {
             let matches = [];
-            if (inputLetters.length >= 2 && inputDigits.length >= 2) {
+            // إذا قرأ المتصفح الأرقام مقلوبة (مثل 5730 بدل 3057)، نقوم بعكسها تلقائياً لتطابق القاعدة
+            let normalDigits = inputDigits.length === 4 ? inputDigits.split('').reverse().join('') : inputDigits;
+
+            if (inputLetters.length >= 2 && normalDigits.length >= 2) {
                 plateDB.forEach(function(p) {
-                    // فحص تطابق الحروف (مباشر أو معكوس أو تقريبي)
                     let pLettersRev = p.letters.split('').reverse().join('');
                     let lMatch = (p.letters === inputLetters || pLettersRev === inputLetters || levenshtein(p.letters, inputLetters) <= 1);
                     
-                    // فحص تطابق الأرقام (مباشر أو معكوس في حال انعكاسها في المتصفح مثل 5730 بدلاً من 3057)
                     let pDigitsRev = p.digits.split('').reverse().join('');
-                    let dMatch = (p.digits === inputDigits || pDigitsRev === inputDigits);
+                    let dMatch = (p.digits === normalDigits || p.digits === inputDigits || pDigitsRev === normalDigits);
 
                     if (lMatch && dMatch) {
                         matches.push(p.original);
