@@ -9,12 +9,13 @@ st.markdown("""
     <style>
     body, div, h1, h2, h3, p { text-align: right; direction: rtl; font-family: sans-serif; }
     .main-title { font-size: 26px; font-weight: bold; color: #1f4e78; text-align: center; margin-bottom: 20px; }
-    .status-box { font-size: 18px; font-weight: bold; text-align: right; padding: 15px; border-radius: 12px; margin-top: 15px; background-color: #f1f5f9; border: 2px solid #cbd5e1; color: #1e293b; }
+    .status-box { font-size: 20px; font-weight: bold; text-align: right; padding: 18px; border-radius: 12px; margin-top: 15px; }
+    .box-found { background-color: #dcfce7; border: 3px solid #16a34a; color: #166534; }
+    .box-not-found { background-color: #fee2e2; border: 3px solid #dc2626; color: #991b1b; text-align: center; }
     .mic-btn { font-size: 18px; padding: 14px 28px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; margin: 5px; width: 48%; transition: 0.3s; }
     .start-btn { background-color: #16a34a; color: white; }
     .stop-btn { background-color: #dc2626; color: white; }
     .clear-btn { background-color: #475569; color: white; }
-    .plate-item { background: #dcfce7; border: 1px solid #86efac; padding: 14px; margin: 8px 0; border-radius: 8px; font-weight: bold; color: #166534; font-size: 26px; text-align: center; }
     .interpreted-box { background: #eff6ff; border: 1px solid #bfdbfe; padding: 12px; border-radius: 8px; margin-top: 10px; color: #1e40af; font-size: 20px; font-weight: bold; direction: rtl; text-align: right; }
     </style>
 """, unsafe_allow_html=True)
@@ -44,7 +45,7 @@ if uploaded_file:
     
     for plate in raw_plates:
         letters, digits = parse_plate(plate)
-        if len(letters) == 3 and len(digits) == 4:
+        if len(letters) >= 2 and len(digits) >= 2:
             plate_database.append({
                 'original': str(plate).strip(),
                 'letters': letters,
@@ -73,9 +74,8 @@ if uploaded_file:
             <div id="liveText" style="text-align: right;">-</div>
         </div>
 
-        <div id="resultBox" class="status-box" style="display:none;">
-            <div style="font-weight: bold; margin-bottom: 8px; color: #0f172a;">📌 اللوحات المطابقة بالملف:</div>
-            <div id="platesList"></div>
+        <div id="resultBox" style="display:none;" class="status-box">
+            <div id="resultMessage"></div>
         </div>
     </div>
 
@@ -83,7 +83,7 @@ if uploaded_file:
         const plateDB = __DB_JSON__;
         let recognizing = false;
         let recognition = null;
-        let lastFoundPlate = "";
+        let lastSpokenText = "";
 
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -122,7 +122,6 @@ if uploaded_file:
 
                 recognition.onresult = function(event) {
                     let bestInterpreted = "";
-                    let matchedResults = [];
 
                     for (let i = event.resultIndex; i < event.results.length; ++i) {
                         let res = event.results[i];
@@ -130,23 +129,16 @@ if uploaded_file:
                             let transcript = res[altIndex].transcript;
                             if (transcript) {
                                 if (!bestInterpreted) bestInterpreted = transcript;
-                                let processed = normalizeAndExtract(transcript);
-                                let found = smartMatch(processed.letters, processed.digits);
-                                if (found.length > 0) {
-                                    matchedResults = matchedResults.concat(found);
-                                }
                             }
                         }
                     }
 
-                    if (bestInterpreted) {
-                        let processedLive = normalizeAndExtract(bestInterpreted);
-                        document.getElementById('liveText').innerText = processedLive.letters + " " + processedLive.digits;
-                    }
-
-                    let uniquePlates = [...new Set(matchedResults)];
-                    if (uniquePlates.length > 0) {
-                        displayResults(uniquePlates);
+                    if (bestInterpreted && bestInterpreted !== lastSpokenText) {
+                        lastSpokenText = bestInterpreted;
+                        let processed = normalizeAndExtract(bestInterpreted);
+                        
+                        document.getElementById('liveText').innerText = processed.letters + " " + processed.digits;
+                        checkAndDisplay(processed.letters, processed.digits);
                     }
                 };
             } catch(e) {}
@@ -158,7 +150,7 @@ if uploaded_file:
                 recognizing = false;
                 try { recognition.stop(); } catch(e) {}
             } else {
-                lastFoundPlate = "";
+                lastSpokenText = "";
                 try { recognition.start(); } catch(e) {}
             }
         }
@@ -166,7 +158,7 @@ if uploaded_file:
         function clearText() {
             document.getElementById('liveText').innerText = "-";
             document.getElementById('resultBox').style.display = 'none';
-            lastFoundPlate = "";
+            lastSpokenText = "";
         }
 
         function normalizeAndExtract(text) {
@@ -215,22 +207,41 @@ if uploaded_file:
             return { letters: letters, digits: digits };
         }
 
-        function smartMatch(inputLetters, inputDigits) {
-            let matches = [];
-            if (inputLetters.length >= 2 && inputDigits.length >= 2) {
-                plateDB.forEach(function(p) {
-                    let pLettersRev = p.letters.split('').reverse().join('');
-                    let lMatch = (p.letters === inputLetters || pLettersRev === inputLetters || levenshtein(p.letters, inputLetters) <= 1);
-                    
-                    let pDigitsRev = p.digits.split('').reverse().join('');
-                    let dMatch = (p.digits === inputDigits || pDigitsRev === inputDigits);
+        function checkAndDisplay(inputLetters, inputDigits) {
+            let resultBox = document.getElementById('resultBox');
+            let resultMsg = document.getElementById('resultMessage');
 
-                    if (lMatch && dMatch) {
-                        matches.push(p.original);
-                    }
-                });
+            if (inputLetters.length < 2 || inputDigits.length < 2) {
+                resultBox.style.display = 'none';
+                return;
             }
-            return matches;
+
+            let matches = [];
+            plateDB.forEach(function(p) {
+                let lMatch = (p.letters.includes(inputLetters) || inputLetters.includes(p.letters) || levenshtein(p.letters, inputLetters) <= 1);
+                let dMatch = (p.digits === inputDigits || p.digits.includes(inputDigits) || inputDigits.includes(p.digits));
+
+                if (lMatch && dMatch) {
+                    matches.push(p.original);
+                }
+            });
+
+            let uniqueMatches = [...new Set(matches)];
+
+            if (uniqueMatches.length > 0) {
+                // موجودة: تلوين بالأخضر + اهتزاز قوية جداً ومكررة
+                resultBox.className = "status-box box-found";
+                resultMsg.innerHTML = "✅ موجودة: " + uniqueMatches.join(" - ");
+                resultBox.style.display = 'block';
+                if ("vibrate" in navigator) { 
+                    navigator.vibrate([400, 200, 400]); 
+                }
+            } else {
+                // غير موجودة: تلوين بالأحمر فقط بدون اهتزاز
+                resultBox.className = "status-box box-not-found";
+                resultMsg.innerHTML = "❌ غير موجودة في الملف";
+                resultBox.style.display = 'block';
+            }
         }
 
         function levenshtein(a, b) {
@@ -250,26 +261,6 @@ if uploaded_file:
                 }
             }
             return matrix[b.length][a.length];
-        }
-
-        function displayResults(plates) {
-            let plateStr = plates.join(",");
-            if (plateStr === lastFoundPlate) return;
-            lastFoundPlate = plateStr;
-
-            let resultBox = document.getElementById('resultBox');
-            let platesListDiv = document.getElementById('platesList');
-            platesListDiv.innerHTML = "";
-
-            plates.forEach(function(plate) {
-                let item = document.createElement('div');
-                item.className = 'plate-item';
-                item.innerText = '📌 ' + plate;
-                platesListDiv.appendChild(item);
-            });
-
-            resultBox.style.display = 'block';
-            if ("vibrate" in navigator) { navigator.vibrate(250); }
         }
     </script>
     """
