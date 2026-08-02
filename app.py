@@ -88,7 +88,7 @@ if uploaded_file:
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
         if (!SpeechRecognition) {
-            document.getElementById('status').innerText = "متصفحك لا يدعم التعرف الصوتي (استخدم متصفح حديث مثل Chrome).";
+            document.getElementById('status').innerText = "متصفحك لا يدعم التعرف الصوتي.";
         } else {
             try {
                 recognition = new SpeechRecognition();
@@ -107,14 +107,11 @@ if uploaded_file:
 
                 recognition.onerror = function(event) {
                     console.log("Speech Error event: ", event.error);
-                    document.getElementById('status').innerText = "خطأ في الميكروفون: " + event.error;
                 };
 
                 recognition.onend = function() {
                     if (recognizing) {
-                        try {
-                            recognition.start();
-                        } catch(e) {}
+                        try { recognition.start(); } catch(e) {}
                     } else {
                         document.getElementById('status').innerText = "الميكروفون متوقف";
                         let btn = document.getElementById('toggleBtn');
@@ -151,26 +148,17 @@ if uploaded_file:
                         displayResults(uniquePlates);
                     }
                 };
-            } catch(e) {
-                console.log("Initialization error: ", e);
-            }
+            } catch(e) {}
         }
 
         function toggleSpeech() {
-            if (!recognition) {
-                alert("خاصية التعرف الصوتي غير متاحة في هذا المتصفح.");
-                return;
-            }
+            if (!recognition) return;
             if (recognizing) {
                 recognizing = false;
-                try {
-                    recognition.stop();
-                } catch(e) {}
+                try { recognition.stop(); } catch(e) {}
             } else {
                 lastFoundPlate = "";
-                try {
-                    recognition.start();
-                } catch(e) {}
+                try { recognition.start(); } catch(e) {}
             }
         }
 
@@ -209,12 +197,10 @@ if uploaded_file:
                  .replace(/قاسم|قسم/g, "ق");
 
             let rawLetters = (t.match(/[\\u0600-\\u06FF]/g) || []).join("").replace(/\\s+/g, '');
+            let letters = rawLetters.split('').sort().join('');
             let digits = (t.match(/[0-9]/g) || []).join("");
 
-            // ترتيب الحروف بغض النظر عن اتجاه النطق
-            let letters = rawLetters.split('').sort().join('');
-
-            return { letters: letters, rawLetters: rawLetters, digits: digits };
+            return { letters: letters, digits: digits };
         }
 
         function smartMatch(inputLetters, inputDigits) {
@@ -223,7 +209,11 @@ if uploaded_file:
                 plateDB.forEach(function(p) {
                     let dbLettersSorted = p.letters.split('').sort().join('');
                     let lMatch = (dbLettersSorted === inputLetters) || (levenshtein(p.letters, inputLetters) <= 1);
-                    let dMatch = (p.digits === inputDigits);
+                    
+                    // دعم المطابقة المباشرة أو المعكوسة للأرقام (في حال قلبها المتصفح)
+                    let dReversed = inputDigits.split('').reverse().join('');
+                    let dMatch = (p.digits === inputDigits || p.digits === dReversed);
+
                     if (lMatch && dMatch) {
                         matches.push(p.original);
                     }
