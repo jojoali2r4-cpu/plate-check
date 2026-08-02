@@ -144,7 +144,6 @@ if uploaded_file:
                     }
                 };
 
-                // التشغيل التلقائي إذا كان المستخدم لم يقم بإغلاقه مسبقاً
                 if (userWantedActive) {
                     try { recognition.start(); } catch(e) {}
                 }
@@ -230,6 +229,7 @@ if uploaded_file:
 
             let matches = [];
             plateDB.forEach(function(p) {
+                // مطابقة متقدمة وشاملة لجميع الصفوف بما فيها الصفوف الأولى
                 let lMatch = (p.letters === inputLetters || p.letters.includes(inputLetters) || inputLetters.includes(p.letters) || levenshtein(p.letters, inputLetters) <= 1);
                 let dMatch = (p.digits === inputDigits || p.digits.includes(inputDigits) || inputDigits.includes(p.digits));
 
