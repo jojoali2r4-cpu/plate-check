@@ -147,7 +147,7 @@ if uploaded_file:
     db_json = json.dumps(plate_database, ensure_ascii=False)
 
     components_code = """
-    <div style="direction: rtl; text-align: center;">
+    <div style="direction: rtl; text-align: center; padding-bottom: 20px;">
         <div>
             <button id="toggleBtn" class="mic-btn start-btn" onclick="toggleSpeech()">🔴 تشغيل الاستماع</button>
             <button class="mic-btn clear-btn" onclick="clearText()">🗑️ مسح النتائج</button>
@@ -376,4 +376,4 @@ if uploaded_file:
     """
 
     components_code = components_code.replace("__DB_JSON__", db_json)
-    st.components.v1.html(components_code, height=520)
+    st.components.v1.html(components_code, height=650)
