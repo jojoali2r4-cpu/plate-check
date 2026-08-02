@@ -159,7 +159,7 @@ if uploaded_file:
             // تحويل الأرقام العربية إلى إنجليزية
             t = t.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
             
-            // مطابقة الأرقام المنطوقة لفظياً
+            // مطابقة الأرقام المنطوقة لفظياً بالترتيب
             t = t.replace(/صفر/g, "0")
                  .replace(/واحد/g, "1")
                  .replace(/اتنين|ثثنين|اثنين/g, "2")
@@ -171,12 +171,11 @@ if uploaded_file:
                  .replace(/تمانية|ثمانية|ثامنه|تمنيه|ثمان/g, "8")
                  .replace(/تسعة|تسعه|تسع/g, "9");
 
-            // تصحيح نطق الحروف الشائع للوحات (مثل بسل)
-            t = t.replace(/بسلام|باسلام|بصل|باسيل|بأسين|باسين|باء سين|با سين|باء سين لام|باسين لام|بس ل|افلام|أفلام/g, "بسل");
-
-            let inputDigitsSorted = (t.match(/[0-9]/g) || []).sort().join("");
-            let inputLettersRaw = (t.match(/[\\u0600-\\u06FF]/g) || []).join("");
-            let inputLettersClean = inputLettersRaw.replace(/\\s+/g, '').split('').sort().join('');
+            // استخراج الأرقام والحفاظ على ترتيبها الأصلي تماماً
+            let inputDigits = (t.match(/[0-9]/g) || []).join("");
+            
+            // استخراج الحروف فقط وإزالة المسافات بينها مع الحفاظ على الترتيب الأصلي
+            let inputLetters = (t.match(/[\\u0600-\\u06FF]/g) || []).join("").replace(/\\s+/g, '');
 
             let resultBox = document.getElementById('resultBox');
             let platesListDiv = document.getElementById('platesList');
@@ -185,13 +184,14 @@ if uploaded_file:
             let matchedCount = 0;
 
             plateDB.forEach(p => {
-                let targetDigitsSorted = p.digits ? p.digits.split('').sort().join('') : "";
-                let targetLettersClean = p.letters ? p.letters.replace(/\\s+/g, '').split('').sort().join('') : "";
+                let targetDigits = p.digits ? p.digits : "";
+                let targetLetters = p.letters ? p.letters.replace(/\\s+/g, '') : "";
 
-                let digitsMatch = (inputDigitsSorted !== "" && inputDigitsSorted === targetDigitsSorted);
-                let lettersMatch = (inputLettersClean !== "" && targetLettersClean !== "" && (targetLettersClean.includes(inputLettersClean) || inputLettersClean.includes(targetLettersClean) || inputLettersClean === targetLettersClean));
+                // مطابقة دقيقة بالترتيب الأصلي للحروف والأرقام
+                let digitsMatch = (inputDigits !== "" && targetDigits.includes(inputDigits));
+                let lettersMatch = (inputLetters !== "" && targetLetters.includes(inputLetters));
 
-                if (digitsMatch && (lettersMatch || inputLettersClean.includes("بسل") && targetLettersClean.includes("بسل"))) {
+                if (digitsMatch && lettersMatch) {
                     matchedCount++;
                     let item = document.createElement('div');
                     item.className = 'plate-item';
