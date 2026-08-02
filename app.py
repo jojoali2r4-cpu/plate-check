@@ -15,7 +15,7 @@ st.markdown("""
     .stop-btn { background-color: #dc2626; color: white; }
     .clear-btn { background-color: #475569; color: white; }
     .plate-item { background: #dcfce7; border: 1px solid #86efac; padding: 14px; margin: 8px 0; border-radius: 8px; font-weight: bold; color: #166534; font-size: 26px; text-align: center; }
-    .interpreted-box { background: #eff6ff; border: 1px solid #bfdbfe; padding: 12px; border-radius: 8px; margin-top: 10px; color: #1e40af; font-size: 20px; font-weight: bold; direction: ltr; text-align: right; unicode-bidi: plaintext; }
+    .interpreted-box { background: #eff6ff; border: 1px solid #bfdbfe; padding: 12px; border-radius: 8px; margin-top: 10px; color: #1e40af; font-size: 20px; font-weight: bold; direction: rtl; text-align: right; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -140,8 +140,8 @@ if uploaded_file:
                     }
 
                     if (bestInterpreted) {
-                        // إصلاح عرض النص المقلوب للمتصفح المحمول ليرتب الأرقام والحروف بشكل صحيح
-                        document.getElementById('liveText').innerText = fixDisplayOrder(bestInterpreted);
+                        let processedLive = normalizeAndExtract(bestInterpreted);
+                        document.getElementById('liveText').innerText = processedLive.letters + " " + processedLive.digits;
                     }
 
                     let uniquePlates = [...new Set(matchedResults)];
@@ -150,18 +150,6 @@ if uploaded_file:
                     }
                 };
             } catch(e) {}
-        }
-
-        function fixDisplayOrder(text) {
-            // فصل الأرقام وعكسها لتظهر صحيحة بصرياً في الموبايل
-            let digits = text.match(/[0-9]+/g);
-            if (digits) {
-                digits.forEach(d => {
-                    let correctedD = d.split('').reverse().join('');
-                    text = text.replace(d, correctedD);
-                });
-            }
-            return text;
         }
 
         function toggleSpeech() {
@@ -229,16 +217,13 @@ if uploaded_file:
 
         function smartMatch(inputLetters, inputDigits) {
             let matches = [];
-            // إذا قرأ المتصفح الأرقام مقلوبة (مثل 5730 بدل 3057)، نقوم بعكسها تلقائياً لتطابق القاعدة
-            let normalDigits = inputDigits.length === 4 ? inputDigits.split('').reverse().join('') : inputDigits;
-
-            if (inputLetters.length >= 2 && normalDigits.length >= 2) {
+            if (inputLetters.length >= 2 && inputDigits.length >= 2) {
                 plateDB.forEach(function(p) {
                     let pLettersRev = p.letters.split('').reverse().join('');
                     let lMatch = (p.letters === inputLetters || pLettersRev === inputLetters || levenshtein(p.letters, inputLetters) <= 1);
                     
                     let pDigitsRev = p.digits.split('').reverse().join('');
-                    let dMatch = (p.digits === normalDigits || p.digits === inputDigits || pDigitsRev === normalDigits);
+                    let dMatch = (p.digits === inputDigits || pDigitsRev === inputDigits);
 
                     if (lMatch && dMatch) {
                         matches.push(p.original);
