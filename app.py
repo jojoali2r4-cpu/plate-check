@@ -159,7 +159,7 @@ if uploaded_file:
             // تحويل الأرقام العربية إلى إنجليزية
             t = t.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
             
-            // مطابقة الأرقام المنطوقة لفظياً
+            // تحويل الكلمات المنطوقة إلى أرقام
             t = t.replace(/صفر/g, "0")
                  .replace(/واحد/g, "1")
                  .replace(/اتنين|ثثنين|اثنين/g, "2")
@@ -171,7 +171,7 @@ if uploaded_file:
                  .replace(/تمانية|ثمانية|ثامنه|تمنيه|ثمان/g, "8")
                  .replace(/تسعة|تسعه|تسع/g, "9");
 
-            // استخراج وتجميع الأرقام والحروف مع معالجة التبديل الصوتي
+            // استخراج الأرقام والحروف
             let inputDigits = (t.match(/[0-9]/g) || []).join("");
             let inputLetters = (t.match(/[\\u0600-\\u06FF]/g) || []).join("").replace(/\\s+/g, '');
 
@@ -185,25 +185,28 @@ if uploaded_file:
                 let targetDigits = p.digits ? p.digits : "";
                 let targetLetters = p.letters ? p.letters.replace(/\\s+/g, '') : "";
 
-                // التحقق من تطابق الحروف بغض النظر عن المسافات أو الترتيب البسيط
-                let lettersMatch = false;
-                if (inputLetters !== "" && targetLetters !== "") {
-                    let matchCount = 0;
-                    for (let char of inputLetters) {
-                        if (targetLetters.includes(char)) matchCount++;
-                    }
-                    if (matchCount >= Math.min(inputLetters.length, targetLetters.length)) {
-                        lettersMatch = true;
+                // مطابقة مرنة للأرقام حتى لو تبدلت الأماكن (بواسطة الترتيب)
+                let digitsMatch = false;
+                if (inputDigits !== "" && targetDigits !== "") {
+                    let sortedInput = inputDigits.split('').sort().join('');
+                    let sortedTarget = targetDigits.split('').sort().join('');
+                    if (sortedInput === sortedTarget || targetDigits.includes(inputDigits) || inputDigits.includes(targetDigits)) {
+                        digitsMatch = true;
                     }
                 }
 
-                // التحقق من تطابق الأرقام حتى لو تم تبديل خاناتها بسبب خطأ النطق الصوتي
-                let digitsMatch = false;
-                if (inputDigits !== "" && targetDigits !== "") {
-                    let sortedInputDigits = inputDigits.split('').sort().join('');
-                    let sortedTargetDigits = targetDigits.split('').sort().join('');
-                    if (sortedInputDigits === sortedTargetDigits) {
-                        digitsMatch = true;
+                // مطابقة مرنة للحروف (تكفي مطابقة الحرف أو الحروف المتاحة)
+                let lettersMatch = false;
+                if (inputLetters !== "" && targetLetters !== "") {
+                    let matchFound = false;
+                    for (let char of inputLetters) {
+                        if (targetLetters.includes(char)) {
+                            matchFound = true;
+                            break;
+                        }
+                    }
+                    if (matchFound || targetLetters.includes(inputLetters) || inputLetters.includes(targetLetters)) {
+                        lettersMatch = true;
                     }
                 }
 
