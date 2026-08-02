@@ -114,9 +114,7 @@ if uploaded_file:
                     if (recognizing) {
                         try {
                             recognition.start();
-                        } catch(e) {
-                            console.log("Restart error: ", e);
-                        }
+                        } catch(e) {}
                     } else {
                         document.getElementById('status').innerText = "الميكروفون متوقف";
                         let btn = document.getElementById('toggleBtn');
@@ -172,9 +170,7 @@ if uploaded_file:
                 lastFoundPlate = "";
                 try {
                     recognition.start();
-                } catch(e) {
-                    console.log("Start error: ", e);
-                }
+                } catch(e) {}
             }
         }
 
@@ -212,20 +208,21 @@ if uploaded_file:
                  .replace(/تيسير|يسير/g, "ت")
                  .replace(/قاسم|قسم/g, "ق");
 
-            let letters = (t.match(/[\\u0600-\\u06FF]/g) || []).join("").replace(/\\s+/g, '');
+            let rawLetters = (t.match(/[\\u0600-\\u06FF]/g) || []).join("").replace(/\\s+/g, '');
             let digits = (t.match(/[0-9]/g) || []).join("");
 
-            if (letters.length > 3) letters = letters.substring(0, 3);
-            if (digits.length > 4) digits = digits.substring(0, 4);
+            // ترتيب الحروف بغض النظر عن اتجاه النطق
+            let letters = rawLetters.split('').sort().join('');
 
-            return { letters: letters, digits: digits };
+            return { letters: letters, rawLetters: rawLetters, digits: digits };
         }
 
         function smartMatch(inputLetters, inputDigits) {
             let matches = [];
             if (inputLetters.length >= 2 && inputDigits.length === 4) {
                 plateDB.forEach(function(p) {
-                    let lMatch = (p.letters === inputLetters) || (levenshtein(p.letters, inputLetters) <= 1);
+                    let dbLettersSorted = p.letters.split('').sort().join('');
+                    let lMatch = (dbLettersSorted === inputLetters) || (levenshtein(p.letters, inputLetters) <= 1);
                     let dMatch = (p.digits === inputDigits);
                     if (lMatch && dMatch) {
                         matches.push(p.original);
