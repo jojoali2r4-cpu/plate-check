@@ -137,7 +137,8 @@ if uploaded_file:
                         lastSpokenText = bestInterpreted;
                         let processed = normalizeAndExtract(bestInterpreted);
                         
-                        document.getElementById('liveText').innerText = processed.letters + " " + processed.digits;
+                        // كتابة الحروف والأرقام متلاصقة تماماً بدون مسافات بينها
+                        document.getElementById('liveText').innerText = processed.letters + processed.digits;
                         checkAndDisplay(processed.letters, processed.digits);
                     }
                 };
@@ -218,7 +219,7 @@ if uploaded_file:
 
             let matches = [];
             plateDB.forEach(function(p) {
-                let lMatch = (p.letters.includes(inputLetters) || inputLetters.includes(p.letters) || levenshtein(p.letters, inputLetters) <= 1);
+                let lMatch = (p.letters === inputLetters || p.letters.includes(inputLetters) || inputLetters.includes(p.letters) || levenshtein(p.letters, inputLetters) <= 1);
                 let dMatch = (p.digits === inputDigits || p.digits.includes(inputDigits) || inputDigits.includes(p.digits));
 
                 if (lMatch && dMatch) {
@@ -229,7 +230,6 @@ if uploaded_file:
             let uniqueMatches = [...new Set(matches)];
 
             if (uniqueMatches.length > 0) {
-                // موجودة: تلوين بالأخضر + اهتزاز قوية جداً ومكررة
                 resultBox.className = "status-box box-found";
                 resultMsg.innerHTML = "✅ موجودة: " + uniqueMatches.join(" - ");
                 resultBox.style.display = 'block';
@@ -237,7 +237,6 @@ if uploaded_file:
                     navigator.vibrate([400, 200, 400]); 
                 }
             } else {
-                // غير موجودة: تلوين بالأحمر فقط بدون اهتزاز
                 resultBox.className = "status-box box-not-found";
                 resultMsg.innerHTML = "❌ غير موجودة في الملف";
                 resultBox.style.display = 'block';
