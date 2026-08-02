@@ -43,7 +43,6 @@ if uploaded_file:
     
     for plate in raw_plates:
         letters, digits = parse_plate(plate)
-        # نحفظ فقط اللوحات التي تحتوي على 3 حروف و4 أرقام في قاعدة البيانات لضمان دقة المطابقة
         if len(letters) == 3 and len(digits) == 4:
             plate_database.append({
                 'original': str(plate).strip(),
@@ -55,7 +54,7 @@ if uploaded_file:
     st.markdown("---")
 
     st.subheader("🎙️ الفحص الصوتي التلقائي:")
-    st.write("اضغطي على زر التشغيل وانطقي اللوحة مباشرة (3 حروف متصلة + 4 أرقام بالترتيب):")
+    st.write("اضغطي على زر التشغيل وانطقي اللوحة مباشرة:")
 
     db_json = json.dumps(plate_database, ensure_ascii=False)
 
@@ -96,7 +95,7 @@ if uploaded_file:
 
             recognition.onstart = function() {
                 recognizing = true;
-                document.getElementById('status').innerText = "🎙️ يستمع الآن.. انطقي 3 حروف و4 أرقام بوضوح!";
+                document.getElementById('status').innerText = "🎙️ يستمع الآن.. انطقي اللوحة بوضوح!";
                 document.getElementById('toggleBtn').innerText = "⏹️ إيقاف الاستماع";
                 document.getElementById('toggleBtn').className = "mic-btn stop-btn";
             };
@@ -161,7 +160,7 @@ if uploaded_file:
             // تحويل الأرقام العربية إلى إنجليزية
             t = t.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
             
-            // تحويل الأرقام المنطوقة لفظياً
+            // تحويل الكلمات إلى أرقام إذا نُطقت لفظياً
             t = t.replace(/صفر/g, "0")
                  .replace(/واحد/g, "1")
                  .replace(/اتنين|ثثنين|اثنين/g, "2")
@@ -173,9 +172,9 @@ if uploaded_file:
                  .replace(/تمانية|ثمانية|ثامنه|تمنيه|ثمان/g, "8")
                  .replace(/تسعة|تسعه|تسع/g, "9");
 
-            // استخراج الحروف المتاحة وإزالة المسافات
+            // دمج الحروف العربية المنطوقة في كلمة واحدة متصلة وإزالة المسافات بينها تماماً
             let inputLetters = (t.match(/[\\u0600-\\u06FF]/g) || []).join("").replace(/\\s+/g, '');
-            // استخراج الأرقام بالترتيب تماماً كما نطقت ودون أي تغيير
+            // جمع الأرقام بالترتيب كما نطقت
             let inputDigits = (t.match(/[0-9]/g) || []).join("");
 
             let resultBox = document.getElementById('resultBox');
@@ -184,10 +183,9 @@ if uploaded_file:
 
             let matchedCount = 0;
 
-            // شرط صارم: يجب أن تكون الحروف 3 بالضبط والأرقام 4 بالضبط
+            // التحقق من أن الحروف المدمجة 3 والأرقام 4 تماماً
             if (inputLetters.length === 3 && inputDigits.length === 4) {
                 plateDB.forEach(p => {
-                    // مطابقة حرفية صارمة بنسبة 100% للترتيب والقيم دون أي تبديل
                     if (p.letters === inputLetters && p.digits === inputDigits) {
                         matchedCount++;
                         let item = document.createElement('div');
@@ -200,7 +198,7 @@ if uploaded_file:
 
             resultBox.style.display = 'block';
             if (matchedCount === 0) {
-                platesListDiv.innerHTML = '<div style="color: #dc3545; font-weight: bold;">❌ لا توجد لوحة مطابقة تماماً (يجب نطق 3 حروف متصلة و4 أرقام بالترتيب).</div>';
+                platesListDiv.innerHTML = '<div style="color: #dc3545; font-weight: bold;">❌ لا توجد لوحة مطابقة تماماً (يجب نطق 3 حروف و4 أرقام).</div>';
             } else {
                 if ("vibrate" in navigator) { navigator.vibrate(200); }
             }
