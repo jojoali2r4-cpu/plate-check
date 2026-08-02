@@ -84,6 +84,7 @@ if uploaded_file:
         let recognizing = false;
         let recognition = null;
         let lastSpokenText = "";
+        let userWantedActive = localStorage.getItem("mic_active") === "true";
 
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -110,9 +111,10 @@ if uploaded_file:
                 };
 
                 recognition.onend = function() {
-                    if (recognizing) {
+                    if (recognizing && userWantedActive) {
                         try { recognition.start(); } catch(e) {}
                     } else {
+                        recognizing = false;
                         document.getElementById('status').innerText = "الميكروفون متوقف";
                         let btn = document.getElementById('toggleBtn');
                         btn.innerText = "🔴 تشغيل الاستماع";
@@ -137,20 +139,29 @@ if uploaded_file:
                         lastSpokenText = bestInterpreted;
                         let processed = normalizeAndExtract(bestInterpreted);
                         
-                        // كتابة الحروف والأرقام متلاصقة تماماً بدون مسافات بينها
                         document.getElementById('liveText').innerText = processed.letters + processed.digits;
                         checkAndDisplay(processed.letters, processed.digits);
                     }
                 };
+
+                // التشغيل التلقائي إذا كان المستخدم لم يقم بإغلاقه مسبقاً
+                if (userWantedActive) {
+                    try { recognition.start(); } catch(e) {}
+                }
+
             } catch(e) {}
         }
 
         function toggleSpeech() {
             if (!recognition) return;
             if (recognizing) {
+                userWantedActive = false;
+                localStorage.setItem("mic_active", "false");
                 recognizing = false;
                 try { recognition.stop(); } catch(e) {}
             } else {
+                userWantedActive = true;
+                localStorage.setItem("mic_active", "true");
                 lastSpokenText = "";
                 try { recognition.start(); } catch(e) {}
             }
