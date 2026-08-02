@@ -172,6 +172,7 @@ if uploaded_file:
             let t = text;
             t = t.replace(/[٠-٩]/g, function(d) { return "٠١٢٣٤٥٦٧٨٩".indexOf(d); });
             
+            // تحويل الأرقام اللفظية
             t = t.replace(/صفر|صيف/g, "0")
                  .replace(/واحد|واحده/g, "1")
                  .replace(/اتنين|ثثنين|اثنين|تنين/g, "2")
@@ -183,36 +184,50 @@ if uploaded_file:
                  .replace(/تمانية|ثمانية|ثامنه|تمنيه|ثمان/g, "8")
                  .replace(/تسعة|تسعه|تسع/g, "9");
 
-            t = t.replace(/حسين|حسن|حسون/g, "س")
-                 .replace(/رقية|رقبه/g, "ر")
-                 .replace(/بهاء|باها/g, "ب")
-                 .replace(/زين|زينة/g, "ز")
-                 .replace(/شيماء|شيم/g, "ش")
-                 .replace(/صالح|صلح/g, "ص")
-                 .replace(/محمد|محمده/g, "م")
-                 .replace(/علي|علا/g, "ع")
-                 .replace(/خالد|خلد/g, "خ")
-                 .replace(/ناصر|نصر/g, "ن")
-                 .replace(/تيسير|يسير/g, "ت")
-                 .replace(/قاسم|قسم/g, "ق");
+            // قاموس تصحيح وتحويل الكلمات والأسماء الكاملة إلى الحروف المطلوبة بدقة
+            t = t.replace(/حسين|حسن|حسون|سين|سني/g, "س")
+                 .replace(/رقية|رقبه|راء|رائيه/g, "ر")
+                 .replace(/بهاء|باها|باء|بائيه/g, "ب")
+                 .replace(/زين|زينة|زاي/g, "ز")
+                 .replace(/شيماء|شيم|شين/g, "ش")
+                 .replace(/صالح|صلح|صاد/g, "ص")
+                 .replace(/محمد|محمده|ميم/g, "م")
+                 .replace(/علي|علا|عين/g, "ع")
+                 .replace(/خالد|خلد|خاء/g, "خ")
+                 .replace(/ناصر|نصر|نون/g, "ن")
+                 .replace(/تيسير|يسير|تاء/g, "ت")
+                 .replace(/قاسم|قسم|قاف/g, "ق")
+                 .replace(/الف|ألف/g, "أ")
+                 .replace(/دال|دولة/g, "د")
+                 .replace(/جيم|جمل/g, "ج")
+                 .replace(/هاء|هوا/g, "ه")
+                 .replace(/واو/g, "و")
+                 .replace(/لام/g, "ل")
+                 .replace(/طاس|طاء/g, "ط");
 
             let rawLetters = (t.match(/[\\u0600-\\u06FF]/g) || []).join("").replace(/\\s+/g, '');
-            let letters = rawLetters.split('').sort().join('');
+            // أخذ الحروف الثلاثة الأولى الناتجة
+            let letters = rawLetters.length > 3 ? rawLetters.substring(0, 3) : rawLetters;
+
             let digits = (t.match(/[0-9]/g) || []).join("");
+            if (digits.length > 4) {
+                digits = digits.substring(0, 4);
+            }
 
             return { letters: letters, digits: digits };
         }
 
         function smartMatch(inputLetters, inputDigits) {
             let matches = [];
-            if (inputLetters.length >= 2 && inputDigits.length === 4) {
+            if (inputLetters.length >= 2 && inputDigits.length >= 2) {
                 plateDB.forEach(function(p) {
-                    let dbLettersSorted = p.letters.split('').sort().join('');
-                    let lMatch = (dbLettersSorted === inputLetters) || (levenshtein(p.letters, inputLetters) <= 1);
+                    // فحص تطابق الحروف (مباشر أو معكوس أو تقريبي)
+                    let pLettersRev = p.letters.split('').reverse().join('');
+                    let lMatch = (p.letters === inputLetters || pLettersRev === inputLetters || levenshtein(p.letters, inputLetters) <= 1);
                     
-                    // دعم المطابقة المباشرة أو المعكوسة للأرقام (في حال قلبها المتصفح)
-                    let dReversed = inputDigits.split('').reverse().join('');
-                    let dMatch = (p.digits === inputDigits || p.digits === dReversed);
+                    // فحص تطابق الأرقام (مباشر أو معكوس في حال انعكاسها في المتصفح مثل 5730 بدلاً من 3057)
+                    let pDigitsRev = p.digits.split('').reverse().join('');
+                    let dMatch = (p.digits === inputDigits || pDigitsRev === inputDigits);
 
                     if (lMatch && dMatch) {
                         matches.push(p.original);
