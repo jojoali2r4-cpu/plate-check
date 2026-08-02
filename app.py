@@ -7,7 +7,6 @@ st.set_page_config(page_title="نظام فحص اللوحات الذكي الف�
 
 st.markdown("""
     <style>
-    /* تصميم الواجهة الفاخرة والمظلمة */
     .stApp {
         background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
         color: #f8fafc;
@@ -132,7 +131,6 @@ if uploaded_file:
     
     for plate in raw_plates:
         letters, digits = parse_plate(plate)
-        # السماح بجميع الصفوف بدقة بما فيها الصف الأول بغض النظر عن ترتيب الحروف والأرقام
         if len(letters) >= 1 or len(digits) >= 1:
             plate_database.append({
                 'original': str(plate).strip(),
@@ -228,12 +226,11 @@ if uploaded_file:
                         lastSpokenText = bestInterpreted;
                         let processed = normalizeAndExtract(bestInterpreted);
                         
-                        document.getElementById('liveText').innerText = processed.fullText;
-                        checkAndDisplay(processed.letters, processed.digits, processed.fullText);
+                        document.getElementById('liveText').innerText = processed.letters + processed.digits;
+                        checkAndDisplay(processed.letters, processed.digits);
                     }
                 };
 
-                // إعادة التشغيل فورا وبثبات إذا كان مفعل مسبقاً عند الدخول للرابط
                 if (userWantedActive) {
                     try { recognition.start(); } catch(e) {}
                 }
@@ -298,32 +295,38 @@ if uploaded_file:
                  .replace(/طاس|طاء/g, "ط");
 
             let rawLetters = (t.match(/[\\u0600-\\u06FF]/g) || []).join("").replace(/\\s+/g, '');
+            let letters = rawLetters.length > 3 ? rawLetters.substring(0, 3) : rawLetters;
+
             let digits = (t.match(/[0-9]/g) || []).join("");
-            
-            return { letters: rawLetters, digits: digits, fullText: rawLetters + digits };
+            if (digits.length > 4) {
+                digits = digits.substring(0, 4);
+            }
+
+            return { letters: letters, digits: digits };
         }
 
-        function checkAndDisplay(inputLetters, inputDigits, fullSpokenText) {
+        function checkAndDisplay(inputLetters, inputDigits) {
             let resultBox = document.getElementById('resultBox');
             let resultMsg = document.getElementById('resultMessage');
             let shareContainer = document.getElementById('shareButtonsContainer');
 
-            if (inputLetters.length === 0 && inputDigits.length === 0) {
+            if (inputLetters.length < 2 || inputDigits.length < 2) {
                 resultBox.style.display = 'none';
                 return;
             }
 
             let matches = [];
             plateDB.forEach(function(p) {
-                let cleanP = (p.letters + p.digits);
-                // مطابقة شاملة ومرنة تضمن جلب الصف الأول أو أي صف بدقة تامة
-                if (cleanP === fullSpokenText || p.original.replace(/\\s+/g, '').includes(fullSpokenText) || fullSpokenText.includes(cleanP) || (inputLetters && p.letters.includes(inputLetters) && p.digits === inputDigits)) {
+                let lMatch = (p.letters === inputLetters || p.letters.includes(inputLetters) || inputLetters.includes(p.letters) || levenshtein(p.letters, inputLetters) <= 1);
+                let dMatch = (p.digits === inputDigits || p.digits.includes(inputDigits) || inputDigits.includes(p.digits));
+
+                if (lMatch && dMatch) {
                     matches.push(p.original);
                 }
             });
 
             let uniqueMatches = [...new Set(matches)];
-
+            let fullSpokenText = inputLetters + inputDigits;
             let shareText = encodeURIComponent("نتيجة فحص اللوحة الذكية: " + fullSpokenText);
 
             if (uniqueMatches.length > 0) {
@@ -349,6 +352,25 @@ if uploaded_file:
                 shareContainer.innerHTML = "";
                 resultBox.style.display = 'block';
             }
+        }
+
+        function levenshtein(a, b) {
+            if(a.length === 0) return b.length;
+            if(b.length === 0) return a.length;
+            let matrix = [];
+            let i, j;
+            for(i = 0; i <= b.length; i++) { matrix[i] = [i]; }
+            for(j = 0; j <= a.length; j++) { matrix[0][j] = j; }
+            for(i = 1; i <= b.length; i++) {
+                for(j = 1; j <= a.length; j++) {
+                    if(b.charAt(i-1) == a.charAt(j-1)) {
+                        matrix[i][j] = matrix[i-1][j-1];
+                    } else {
+                        matrix[i][j] = Math.min(matrix[i-1][j-1] + 1, Math.min(matrix[i][j-1] + 1, matrix[i-1][j] + 1));
+                    }
+                }
+            }
+            return matrix[b.length][a.length];
         }
     </script>
     """
