@@ -59,7 +59,7 @@ if uploaded_file:
 
     db_json = json.dumps(plate_database, ensure_ascii=False)
 
-    components_code = f"""
+    components_code = """
     <div style="direction: rtl; text-align: center;">
         <div>
             <button id="toggleBtn" class="mic-btn start-btn" onclick="toggleSpeech()">🔴 تشغيل الاستماع</button>
@@ -80,7 +80,7 @@ if uploaded_file:
     </div>
 
     <script>
-        const plateDB = {db_json};
+        const plateDB = __DB_JSON__;
         let recognizing = false;
         let recognition = null;
         let lastFoundPlate = "";
@@ -186,7 +186,7 @@ if uploaded_file:
 
         function normalizeAndExtract(text) {
             let t = text;
-            t = t.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
+            t = t.replace(/[٠-٩]/g, function(d) { return "٠١٢٣٤٥٦٧٨٩".indexOf(d); });
             
             t = t.replace(/صفر|صيف/g, "0")
                  .replace(/واحد|واحده/g, "1")
@@ -224,7 +224,7 @@ if uploaded_file:
         function smartMatch(inputLetters, inputDigits) {
             let matches = [];
             if (inputLetters.length >= 2 && inputDigits.length === 4) {
-                plateDB.forEach(p => {
+                plateDB.forEach(function(p) {
                     let lMatch = (p.letters === inputLetters) || (levenshtein(p.letters, inputLetters) <= 1);
                     let dMatch = (p.digits === inputDigits);
                     if (lMatch && dMatch) {
@@ -263,7 +263,7 @@ if uploaded_file:
             let platesListDiv = document.getElementById('platesList');
             platesListDiv.innerHTML = "";
 
-            plates.forEach(plate => {
+            plates.forEach(function(plate) {
                 let item = document.createElement('div');
                 item.className = 'plate-item';
                 item.innerText = '📌 ' + plate;
@@ -276,4 +276,5 @@ if uploaded_file:
     </script>
     """
 
+    components_code = components_code.replace("__DB_JSON__", db_json)
     st.components.v1.html(components_code, height=500)
