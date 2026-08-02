@@ -159,7 +159,7 @@ if uploaded_file:
             // تحويل الأرقام العربية إلى إنجليزية
             t = t.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
             
-            // تحويل الكلمات المنطوقة إلى أرقام
+            // استبدال الكلمات المنطوقة للأرقام
             t = t.replace(/صفر/g, "0")
                  .replace(/واحد/g, "1")
                  .replace(/اتنين|ثثنين|اثنين/g, "2")
@@ -171,9 +171,10 @@ if uploaded_file:
                  .replace(/تمانية|ثمانية|ثامنه|تمنيه|ثمان/g, "8")
                  .replace(/تسعة|تسعه|تسع/g, "9");
 
-            // استخراج الأرقام والحروف
-            let inputDigits = (t.match(/[0-9]/g) || []).join("");
+            // استخراج وتجميع جميع الحروف العربية وإزالة كافة المسافات بينها لتصبح كلمة متصلة
             let inputLetters = (t.match(/[\\u0600-\\u06FF]/g) || []).join("").replace(/\\s+/g, '');
+            // استخراج الأرقام
+            let inputDigits = (t.match(/[0-9]/g) || []).join("");
 
             let resultBox = document.getElementById('resultBox');
             let platesListDiv = document.getElementById('platesList');
@@ -185,28 +186,30 @@ if uploaded_file:
                 let targetDigits = p.digits ? p.digits : "";
                 let targetLetters = p.letters ? p.letters.replace(/\\s+/g, '') : "";
 
-                // مطابقة مرنة للأرقام حتى لو تبدلت الأماكن (بواسطة الترتيب)
+                // مطابقة الحروف بمرونة بغض النظر عن المسافات المنطوقة
+                let lettersMatch = false;
+                if (inputLetters !== "" && targetLetters !== "") {
+                    if (targetLetters.includes(inputLetters) || inputLetters.includes(targetLetters)) {
+                        lettersMatch = true;
+                    } else {
+                        // مطابقة جزئية في حال نطق بعض الحروف فقط
+                        let matchedChars = 0;
+                        for (let char of inputLetters) {
+                            if (targetLetters.includes(char)) matchedChars++;
+                        }
+                        if (matchedChars >= Math.min(inputLetters.length, targetLetters.length)) {
+                            lettersMatch = true;
+                        }
+                    }
+                }
+
+                // مطابقة الأرقام حتى لو انعكس ترتيب خاناتها
                 let digitsMatch = false;
                 if (inputDigits !== "" && targetDigits !== "") {
                     let sortedInput = inputDigits.split('').sort().join('');
                     let sortedTarget = targetDigits.split('').sort().join('');
                     if (sortedInput === sortedTarget || targetDigits.includes(inputDigits) || inputDigits.includes(targetDigits)) {
                         digitsMatch = true;
-                    }
-                }
-
-                // مطابقة مرنة للحروف (تكفي مطابقة الحرف أو الحروف المتاحة)
-                let lettersMatch = false;
-                if (inputLetters !== "" && targetLetters !== "") {
-                    let matchFound = false;
-                    for (let char of inputLetters) {
-                        if (targetLetters.includes(char)) {
-                            matchFound = true;
-                            break;
-                        }
-                    }
-                    if (matchFound || targetLetters.includes(inputLetters) || inputLetters.includes(targetLetters)) {
-                        lettersMatch = true;
                     }
                 }
 
