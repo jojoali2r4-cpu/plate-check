@@ -92,13 +92,32 @@ audio = mic_recorder(
 
 if audio is not None:
 
-    st.success("تم تسجيل الصوت بنجاح.")
-
-    # نحفظ الصوت في الذاكرة فقط
     audio_bytes = audio["bytes"]
 
-    # نحتفظ به لاستخدامه لاحقًا مع تحويل الكلام إلى نص
-    st.session_state["recorded_audio"] = audio_bytes
+    # تحويل التسجيل الصوتي إلى نص
+    spoken_text = audio_to_text(audio_bytes)
+
+    # البحث عن لوحة مطابقة
+    if spoken_text and plates:
+
+        from rapidfuzz import process, fuzz
+
+        result = process.extractOne(
+            spoken_text,
+            plates,
+            scorer=fuzz.ratio
+        )
+
+        if result and result[1] >= 65:
+            matched_plate = result[0]
+
+            st.session_state.matches = [matched_plate]
+
+        else:
+            st.session_state.matches = []
+
+    else:
+        st.session_state.matches = []
 
 
 st.divider()
