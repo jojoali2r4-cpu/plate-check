@@ -2,6 +2,24 @@ import streamlit as st
 import pandas as pd
 from streamlit_mic_recorder import mic_recorder
 import speech_recognition as sr
+def audio_to_text(audio_bytes):
+    recognizer = sr.Recognizer()
+
+    try:
+        with open("temp_audio.wav", "wb") as f:
+            f.write(audio_bytes)
+
+        with sr.AudioFile("temp_audio.wav") as source:
+            audio = recognizer.record(source)
+
+        text = recognizer.recognize_google(audio, language="ar-SA")
+        return text
+
+    except sr.UnknownValueError:
+        return ""
+
+    except Exception:
+        return ""
 
 st.set_page_config(
     page_title="نظام فحص لوحات السيارات",
