@@ -44,8 +44,7 @@ plates = []
 if uploaded_file is not None:
     try:
         df = pd.read_excel(
-            uploaded_file,
-            sheet_name="بيانات"
+            uploaded_file
         )
 
         if "اللوحه" not in df.columns:
