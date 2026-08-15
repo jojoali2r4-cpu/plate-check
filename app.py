@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from streamlit_mic_recorder import mic_recorder
+import speech_recognition as sr
 
 st.set_page_config(
     page_title="نظام فحص لوحات السيارات",
