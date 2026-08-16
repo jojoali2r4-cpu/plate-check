@@ -168,29 +168,78 @@ def find_matching_plates(spoken_text, plates):
 
     spoken_text = normalize_numbers(str(spoken_text))
 
-    # استخراج: حروف عربية + 4 أرقام
-    spoken_plates = re.findall(
-        r'([ء-ي]+)\s*(\d{4})',
-        spoken_text
-    )
-
-    # تحويلها لشكل موحد بدون مسافات
-    spoken_plates = [
-        letters + numbers
-        for letters, numbers in spoken_plates
-    ]
+    # توحيد المسافات
+    spoken_text = re.sub(r"\s+", " ", spoken_text).strip()
 
     matches = []
 
-    for plate in plates:
-        plate_text = normalize_numbers(str(plate))
+    # استخراج الأرقام من الكلام
+    numbers = re.findall(r"\d+", spoken_text)
 
-        # إزالة المسافات فقط للمقارنة
-        clean_plate = re.sub(r'\s+', '', plate_text)
+    # تكوين أرقام اللوحات من:
+    # 7260
+    # أو 72 60
+    candidates = []
 
-        # المطابقة لازم تكون كاملة
-        if clean_plate in spoken_plates:
-            matches.append(plate)
+    for i, number in enumerate(numbers):
+
+        if len(number) == 4:
+            candidates.append(number)
+
+        elif (
+            len(number) == 2
+            and i + 1 < len(numbers)
+            and len(numbers[i + 1]) == 2
+        ):
+            candidates.append(
+                number + numbers[i + 1]
+            )
+
+    candidates = list(dict.fromkeys(candidates))
+
+    # البحث عن كل رقم كامل داخل اللوحات
+    for candidate in candidates:
+
+        possible_plates = []
+
+        for plate in plates:
+
+            plate_text = normalize_numbers(
+                str(plate)
+            )
+
+            plate_digits = "".join(
+                re.findall(r"\d", plate_text)
+            )
+
+            if plate_digits == candidate:
+                possible_plates.append(plate)
+
+        # إذا وجدنا لوحة بنفس الرقم
+        # نستخدم الحروف كعامل إضافي
+        for plate in possible_plates:
+
+            plate_text = clean_text(str(plate))
+
+            # النص المنطوق كاملًا
+            spoken_clean = clean_text(
+                spoken_text
+            )
+
+            # تطابق كامل أولًا
+            if plate_text in spoken_clean:
+                matches.append(plate)
+
+            else:
+                # نأخذ درجة تشابه للكلام
+                # مع المحافظة على الرقم الصحيح
+                score = fuzz.partial_ratio(
+                    plate_text,
+                    spoken_clean
+                )
+
+                if score >= 55:
+                    matches.append(plate)
 
     return list(dict.fromkeys(matches))
 
