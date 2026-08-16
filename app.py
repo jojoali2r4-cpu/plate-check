@@ -31,6 +31,9 @@ if "matched_plate" not in st.session_state:
 if "spoken_text" not in st.session_state:
     st.session_state.spoken_text = ""
 
+if "processing" not in st.session_state:
+    st.session_state.processing = False
+
 
 # =========================================================
 # رفع ملف Excel
@@ -38,7 +41,8 @@ if "spoken_text" not in st.session_state:
 
 uploaded_file = st.file_uploader(
     "📁 ارفعي ملف اللوحات",
-    type=["xlsx", "xls"]
+    type=["xlsx", "xls"],
+    key="excel_upload"
 )
 
 plates = []
@@ -50,9 +54,9 @@ if uploaded_file is not None:
 
         df = pd.read_excel(uploaded_file)
 
-        # ---------------------------------------------
+        # -------------------------------------------------
         # تنظيف أسماء الأعمدة
-        # ---------------------------------------------
+        # -------------------------------------------------
 
         cleaned_columns = {}
 
@@ -69,9 +73,9 @@ if uploaded_file is not None:
             cleaned_columns[column] = clean_column
 
 
-        # ---------------------------------------------
-        # أسماء محتملة لعمود اللوحات
-        # ---------------------------------------------
+        # -------------------------------------------------
+        # أسماء الأعمدة المقبولة
+        # -------------------------------------------------
 
         possible_names = [
             "اللوحه",
@@ -83,6 +87,7 @@ if uploaded_file is not None:
             "رقماللوحة",
             "رقماللوحات"
         ]
+
 
         plate_column = None
 
@@ -96,9 +101,9 @@ if uploaded_file is not None:
                 break
 
 
-        # ---------------------------------------------
+        # -------------------------------------------------
         # إذا لم نجد العمود
-        # ---------------------------------------------
+        # -------------------------------------------------
 
         if plate_column is None:
 
@@ -117,6 +122,10 @@ if uploaded_file is not None:
 
         else:
 
+            # -------------------------------------------------
+            # قراءة اللوحات
+            # -------------------------------------------------
+
             plates = (
                 df[plate_column]
                 .dropna()
@@ -133,7 +142,7 @@ if uploaded_file is not None:
     except Exception as e:
 
         st.error(
-            f"حدث خطأ أثناء قراءة ملف Excel: {e}"
+            f"❌ حدث خطأ أثناء قراءة ملف Excel: {e}"
         )
 
 
@@ -155,6 +164,32 @@ def normalize_numbers(text):
 
 
 # =========================================================
+# تنظيف النص الأساسي
+# =========================================================
+
+def basic_clean(text):
+
+    text = normalize_numbers(text)
+
+    text = str(text).lower()
+
+    # توحيد بعض الحروف
+    text = text.replace("أ", "ا")
+    text = text.replace("إ", "ا")
+    text = text.replace("آ", "ا")
+    text = text.replace("ى", "ي")
+
+    # إزالة التشكيل
+    text = re.sub(
+        r"[\u064B-\u065F]",
+        "",
+        text
+    )
+
+    return text.strip()
+
+
+# =========================================================
 # أسماء الحروف العربية
 # =========================================================
 
@@ -162,9 +197,11 @@ ARABIC_LETTERS = {
 
     "الف": "ا",
     "ألف": "ا",
+    "الفه": "ا",
 
     "باء": "ب",
     "با": "ب",
+    "باءه": "ب",
 
     "تاء": "ت",
     "تا": "ت",
@@ -190,6 +227,7 @@ ARABIC_LETTERS = {
 
     "زاي": "ز",
     "زايه": "ز",
+    "زاي": "ز",
 
     "سين": "س",
     "سينه": "س",
@@ -237,9 +275,7 @@ ARABIC_LETTERS = {
     "واو": "و",
 
     "ياء": "ي",
-    "يا": "ي",
-
-    "لام": "ل"
+    "يا": "ي"
 }
 
 
@@ -284,28 +320,27 @@ DIGIT_WORDS = {
 
 
 # =========================================================
-# تنظيف النص
+# كلمات يتم تجاهلها
 # =========================================================
 
-def basic_clean(text):
-
-    text = normalize_numbers(text)
-
-    text = str(text).lower()
-
-    text = text.replace("أ", "ا")
-    text = text.replace("إ", "ا")
-    text = text.replace("آ", "ا")
-    text = text.replace("ى", "ي")
-
-    # إزالة التشكيل
-    text = re.sub(
-        r"[\u064B-\u065F]",
-        "",
-        text
-    )
-
-    return text
+FILLER_WORDS = {
+    "اللوحة",
+    "لوحة",
+    "اللوحه",
+    "لوحه",
+    "رقم",
+    "الرقم",
+    "هي",
+    "هو",
+    "موقع",
+    "موجود",
+    "موجودة",
+    "الموجودة",
+    "في",
+    "الملف",
+    "من",
+    "و"
+}
 
 
 # =========================================================
@@ -314,11 +349,12 @@ def basic_clean(text):
 
 def normalize_plate(plate):
 
-    text = basic_clean(
-        plate
-    )
+    text = basic_clean(plate)
 
-    # الاحتفاظ بالحروف والأرقام فقط
+    # تحويل الأرقام العربية
+    text = normalize_numbers(text)
+
+    # إزالة المسافات والعلامات
     text = re.sub(
         r"[^0-9\u0621-\u064A]",
         "",
@@ -329,275 +365,101 @@ def normalize_plate(plate):
 
 
 # =========================================================
-# تحويل كلمة إلى حرف أو رقم
+# تحويل كلمة منطوقة إلى حرف أو رقم
 # =========================================================
 
-def convert_spoken_token(token):
+def convert_spoken_word(word):
 
-    token = basic_clean(
-        token
-    )
+    word = basic_clean(word)
 
-    # إزالة بعض العلامات
-    token = re.sub(
-        r"[^\u0621-\u064A0-9]",
-        "",
-        token
-    )
+    # -----------------------------------------------------
+    # إذا كانت الكلمة رقمًا مكتوبًا
+    # -----------------------------------------------------
 
-    # رقم مكتوب كرقم
-    if token.isdigit():
-
-        return token
+    if word.isdigit():
+        return word
 
 
-    # حرف منطوق
-    if token in ARABIC_LETTERS:
+    # -----------------------------------------------------
+    # حرف عربي منطوق
+    # -----------------------------------------------------
 
-        return ARABIC_LETTERS[token]
+    if word in ARABIC_LETTERS:
+
+        return ARABIC_LETTERS[word]
 
 
+    # -----------------------------------------------------
     # رقم منطوق
-    if token in DIGIT_WORDS:
+    # -----------------------------------------------------
 
-        return DIGIT_WORDS[token]
+    if word in DIGIT_WORDS:
+
+        return DIGIT_WORDS[word]
 
 
     return None
 
 
 # =========================================================
-# تحويل الكلام إلى مجموعات محتملة للوحات
+# تحويل الكلام المنطوق إلى صيغة لوحة
 # =========================================================
 
-def extract_spoken_candidates(spoken_text):
+def spoken_to_plate(text):
 
-    text = basic_clean(
-        spoken_text
-    )
+    text = basic_clean(text)
 
-    # تقسيم الكلام إلى كلمات
-    raw_tokens = re.findall(
+    # تحويل الأرقام العربية
+    text = normalize_numbers(text)
+
+    # فصل الكلام
+    words = re.findall(
         r"[\u0621-\u064A0-9]+",
         text
     )
 
-
-    converted_tokens = []
-
-    for token in raw_tokens:
-
-        converted = convert_spoken_token(
-            token
-        )
-
-        if converted is not None:
-
-            converted_tokens.append(
-                converted
-            )
-
-        else:
-
-            # إذا كانت الكلمة تحتوي رقمًا
-            numbers = re.findall(
-                r"\d+",
-                token
-            )
-
-            if numbers:
-
-                for number in numbers:
-
-                    converted_tokens.append(
-                        number
-                    )
-
-
-    candidates = []
-
-
-    # =====================================================
-    # إنشاء تسلسلات محتملة
-    # =====================================================
-
-    for start in range(
-        len(converted_tokens)
-    ):
-
-        current = ""
-
-        for end in range(
-            start,
-            min(
-                start + 12,
-                len(converted_tokens)
-            )
-        ):
-
-            current += converted_tokens[end]
-
-            candidates.append(
-                current
-            )
-
-
-    # إزالة التكرار
-    candidates = list(
-        dict.fromkeys(
-            candidates
-        )
-    )
-
-    return candidates
-
-
-# =========================================================
-# البحث عن اللوحة
-# =========================================================
-
-def find_matching_plate(
-    spoken_text,
-    plates
-):
-
-    if not spoken_text:
-        return None
-
-    if not plates:
-        return None
-
-
-    # =====================================================
-    # اللوحات الموجودة فعليًا في Excel
-    # =====================================================
-
-    normalized_plates = {}
-
-    for plate in plates:
-
-        normalized = normalize_plate(
-            plate
-        )
-
-        if normalized:
-
-            normalized_plates[
-                normalized
-            ] = plate
-
-
-    # =====================================================
-    # أول محاولة:
-    # الكلام كله يكون لوحة واحدة
-    # =====================================================
-
-    full_text = basic_clean(
-        spoken_text
-    )
-
-    # إزالة كلمات الربط
-    filler_words = [
-        "اللوحة",
-        "لوحة",
-        "رقم",
-        "الرقم",
-        "هي",
-        "هو",
-        "موقع",
-        "موجودة",
-        "موجود",
-        "من",
-        "في"
-    ]
-
-    words = full_text.split()
-
-    useful_words = []
+    result = ""
 
     for word in words:
 
-        if word not in filler_words:
+        # تجاهل الكلمات غير المهمة
+        if word in FILLER_WORDS:
+            continue
 
-            useful_words.append(
-                word
-            )
 
-    converted_full = ""
-
-    all_converted = True
-
-    for word in useful_words:
-
-        converted = convert_spoken_token(
+        converted = convert_spoken_word(
             word
         )
 
+
         if converted is not None:
 
-            converted_full += converted
+            result += converted
 
-        else:
+            continue
 
-            # إذا كانت الكلمة رقمًا أو تحتوي أرقامًا
-            numbers = re.findall(
-                r"\d+",
-                word
+
+        # -------------------------------------------------
+        # إذا كانت الكلمة تحتوي أرقامًا
+        # -------------------------------------------------
+
+        numbers = re.findall(
+            r"\d+",
+            word
+        )
+
+        if numbers:
+
+            result += "".join(
+                numbers
             )
 
-            if numbers:
 
-                converted_full += "".join(
-                    numbers
-                )
-
-            else:
-
-                all_converted = False
-
-
-    if converted_full in normalized_plates:
-
-        return normalized_plates[
-            converted_full
-        ]
-
-
-    # =====================================================
-    # المحاولة الثانية:
-    # استخراج تسلسلات كاملة من الكلام
-    #
-    # مهم جدًا:
-    # لا توجد مطابقة جزئية داخل رقم آخر.
-    # =====================================================
-
-    candidates = extract_spoken_candidates(
-        spoken_text
-    )
-
-
-    # =====================================================
-    # مقارنة كل مرشح مع لوحة كاملة في Excel
-    # =====================================================
-
-    for candidate in candidates:
-
-        if candidate in normalized_plates:
-
-            return normalized_plates[
-                candidate
-            ]
-
-
-    # =====================================================
-    # لا يوجد تطابق
-    # =====================================================
-
-    return None
+    return result
 
 
 # =========================================================
-# تجهيز الصوت
+# تحويل الصوت إلى WAV
 # =========================================================
 
 def prepare_audio(audio_bytes):
@@ -619,10 +481,11 @@ def prepare_audio(audio_bytes):
 
         return audio
 
+
     except Exception as e:
 
         st.error(
-            f"❌ حدث خطأ أثناء قراءة الملف الصوتي: {e}"
+            f"❌ لا يمكن قراءة الملف الصوتي: {e}"
         )
 
         return None
@@ -641,11 +504,9 @@ def audio_to_text(audio_bytes):
     )
 
     if audio is None:
-
         return ""
 
     if len(audio) == 0:
-
         return ""
 
 
@@ -653,8 +514,8 @@ def audio_to_text(audio_bytes):
     # تقسيم الصوت
     # =====================================================
 
-    # 15 ثانية لتقليل عدد الطلبات
-    chunk_length = 15000
+    # 20 ثانية لتقليل عدد طلبات Google
+    chunk_length = 20000
 
     chunks = []
 
@@ -688,7 +549,7 @@ def audio_to_text(audio_bytes):
 
 
     # =====================================================
-    # التعرف على الصوت
+    # التعرف على الكلام
     # =====================================================
 
     for index, chunk in enumerate(chunks):
@@ -757,6 +618,74 @@ def audio_to_text(audio_bytes):
 
 
 # =========================================================
+# البحث عن اللوحة
+# =========================================================
+
+def find_matching_plate(
+    spoken_text,
+    plates
+):
+
+    if not spoken_text:
+        return None
+
+    if not plates:
+        return None
+
+
+    # =====================================================
+    # تجهيز اللوحات الموجودة في Excel
+    # =====================================================
+
+    normalized_plates = {}
+
+    for plate in plates:
+
+        normalized = normalize_plate(
+            plate
+        )
+
+        if normalized:
+
+            normalized_plates[
+                normalized
+            ] = plate
+
+
+    # =====================================================
+    # تحويل الكلام إلى لوحة
+    # =====================================================
+
+    spoken_plate = spoken_to_plate(
+        spoken_text
+    )
+
+
+    # =====================================================
+    # تطابق كامل 100%
+    # =====================================================
+
+    if spoken_plate in normalized_plates:
+
+        return normalized_plates[
+            spoken_plate
+        ]
+
+
+    # =====================================================
+    # لا توجد مطابقة
+    #
+    # ممنوع هنا:
+    # - partial matching
+    # - similarity
+    # - اقتراحات
+    # - البحث عن جزء من الرقم
+    # =====================================================
+
+    return None
+
+
+# =========================================================
 # معالجة التسجيل
 # =========================================================
 
@@ -776,27 +705,29 @@ def process_audio(audio_bytes):
     st.session_state.spoken_text = ""
 
 
-    # تحويل الصوت
+    # =====================================================
+    # تحويل التسجيل
+    # =====================================================
+
     spoken_text = audio_to_text(
         audio_bytes
     )
 
 
-    st.session_state.spoken_text = (
-        spoken_text
-    )
+    st.session_state.spoken_text = spoken_text
 
 
-    # البحث عن اللوحة
+    # =====================================================
+    # البحث
+    # =====================================================
+
     matched_plate = find_matching_plate(
         spoken_text,
         plates
     )
 
 
-    st.session_state.matched_plate = (
-        matched_plate
-    )
+    st.session_state.matched_plate = matched_plate
 
 
 # =========================================================
@@ -817,23 +748,17 @@ tab1, tab2 = st.tabs(
 
 
 # =========================================================
-# تسجيل من التطبيق
+# التسجيل من التطبيق
 # =========================================================
 
 with tab1:
 
     audio_recorded = mic_recorder(
-
         start_prompt="🎙️ بدء التسجيل",
-
         stop_prompt="⏹️ إيقاف التسجيل",
-
         just_once=True,
-
         use_container_width=True,
-
         key="recorder"
-
     )
 
 
@@ -853,10 +778,46 @@ with tab1:
 with tab2:
 
     uploaded_audio = st.file_uploader(
-
         "📁 اختاري أي ملف صوتي من ملفات الهاتف",
-
-        # يسمح باختيار الملفات الصوتية المختلفة
         type=None,
+        key="audio_upload"
+    )
 
-        key="
+
+    if uploaded_audio is not None:
+
+        audio_bytes = uploaded_audio.read()
+
+        process_audio(
+            audio_bytes
+        )
+
+
+# =========================================================
+# النتيجة
+# =========================================================
+
+st.divider()
+
+st.header("📋 النتيجة")
+
+
+if st.session_state.matched_plate:
+
+    st.success(
+        f"✅ {st.session_state.matched_plate} موجودة في الملف"
+    )
+
+
+elif st.session_state.spoken_text:
+
+    st.error(
+        "❌ اللوحة غير موجودة في الملف"
+    )
+
+
+else:
+
+    st.info(
+        "🎙️ سجلي أو ارفعي تسجيلًا للبحث عن اللوحة."
+    )
