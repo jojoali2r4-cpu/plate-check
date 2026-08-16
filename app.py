@@ -75,15 +75,14 @@ st.divider()
 # =========================
 
 st.subheader("🎙️ التسجيل الصوتي")
-
 audio = mic_recorder(
     start_prompt="🎙️ بدء التسجيل",
     stop_prompt="⏹️ إيقاف التسجيل",
     just_once=True,
     use_container_width=True,
-    key="car_plate_recorder"
-    format="wav"
+    key="car_plate_recorder",
 )
+
 
 
 # =========================
