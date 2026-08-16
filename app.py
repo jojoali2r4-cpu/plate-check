@@ -6,7 +6,6 @@ import io
 
 from streamlit_mic_recorder import mic_recorder
 from pydub import AudioSegment
-from rapidfuzz import fuzz
 
 
 # =========================
@@ -36,6 +35,7 @@ plates = []
 if uploaded_file is not None:
 
     try:
+
         df = pd.read_excel(uploaded_file)
 
         if "اللوحه" not in df.columns:
@@ -88,10 +88,11 @@ def normalize_numbers(text):
 
 def clean_text(text):
 
-    text = normalize_numbers(text)
+    text = normalize_numbers(str(text))
 
     text = text.lower()
 
+    # إزالة المسافات والعلامات فقط
     text = re.sub(
         r"[\s\-_,.!؟،]+",
         "",
@@ -137,7 +138,15 @@ def audio_to_text(audio_bytes):
 
         with sr.AudioFile(wav_file) as source:
 
-            audio_data = recognizer.record(source)
+            # تقليل الضوضاء البسيطة
+            recognizer.adjust_for_ambient_noise(
+                source,
+                duration=0.3
+            )
+
+            audio_data = recognizer.record(
+                source
+            )
 
         text = recognizer.recognize_google(
             audio_data,
@@ -160,90 +169,36 @@ def audio_to_text(audio_bytes):
 
 
 # =========================
-# البحث عن اللوحات
+# البحث عن اللوحة
 # =========================
-def find_matching_plates(spoken_text, plates):
+
+def find_exact_plate(spoken_text, plates):
+
     if not spoken_text or not plates:
-        return []
+        return None
 
-    spoken_text = normalize_numbers(str(spoken_text))
+    # تنظيف الكلام المنطوق
+    spoken_clean = clean_text(
+        spoken_text
+    )
 
-    # توحيد المسافات
-    spoken_text = re.sub(r"\s+", " ", spoken_text).strip()
+    # =====================================
+    # مطابقة كاملة فقط
+    # =====================================
 
-    matches = []
+    for plate in plates:
 
-    # استخراج الأرقام من الكلام
-    numbers = re.findall(r"\d+", spoken_text)
+        plate_clean = clean_text(
+            plate
+        )
 
-    # تكوين أرقام اللوحات من:
-    # 7260
-    # أو 72 60
-    candidates = []
+        # لازم يكون التطابق كامل 100%
+        if spoken_clean == plate_clean:
 
-    for i, number in enumerate(numbers):
+            # نرجع اللوحة الأصلية من Excel
+            return plate
 
-        if len(number) == 4:
-            candidates.append(number)
-
-        elif (
-            len(number) == 2
-            and i + 1 < len(numbers)
-            and len(numbers[i + 1]) == 2
-        ):
-            candidates.append(
-                number + numbers[i + 1]
-            )
-
-    candidates = list(dict.fromkeys(candidates))
-
-    # البحث عن كل رقم كامل داخل اللوحات
-    for candidate in candidates:
-
-        possible_plates = []
-
-        for plate in plates:
-
-            plate_text = normalize_numbers(
-                str(plate)
-            )
-
-            plate_digits = "".join(
-                re.findall(r"\d", plate_text)
-            )
-
-            if plate_digits == candidate:
-                possible_plates.append(plate)
-
-        # إذا وجدنا لوحة بنفس الرقم
-        # نستخدم الحروف كعامل إضافي
-        for plate in possible_plates:
-
-            plate_text = clean_text(str(plate))
-
-            # النص المنطوق كاملًا
-            spoken_clean = clean_text(
-                spoken_text
-            )
-
-            # تطابق كامل أولًا
-            if plate_text in spoken_clean:
-                matches.append(plate)
-
-            else:
-                # نأخذ درجة تشابه للكلام
-                # مع المحافظة على الرقم الصحيح
-                score = fuzz.partial_ratio(
-                    plate_text,
-                    spoken_clean
-                )
-
-                if score >= 55:
-                    matches.append(plate)
-
-    return list(dict.fromkeys(matches))
-
-
+    return None
 
 
 # =========================
@@ -257,7 +212,7 @@ st.header("🎙️ مصدر التسجيل")
 tab1, tab2 = st.tabs(
     [
         "🎙️ تسجيل من التطبيق",
-        "📁 رفع تسجيل جاهز"
+        "📁 رفع تسجيل من الجوال"
     ]
 )
 
@@ -286,36 +241,60 @@ with tab1:
 
         audio_bytes = audio_recorded["bytes"]
 
-        if plates:
+        if not plates:
+
+            st.warning(
+                "ارفعي ملف Excel أولًا."
+            )
+
+        else:
 
             spoken_text = audio_to_text(
                 audio_bytes
             )
 
-            matches = find_matching_plates(
+            # عرض النص الذي فهمه النظام
+            if spoken_text:
+
+                st.write(
+                    f"🎙️ **النص الذي تم التعرف عليه:** {spoken_text}"
+                )
+
+            else:
+
+                st.warning(
+                    "لم يتمكن النظام من فهم التسجيل."
+                )
+
+            # البحث عن تطابق كامل
+            matched_plate = find_exact_plate(
                 spoken_text,
                 plates
             )
 
-            st.session_state.matches = matches
+            st.session_state.matched_plate = (
+                matched_plate
+            )
 
 
 # =========================
-# رفع تسجيل جاهز
+# رفع تسجيل من الجوال
 # =========================
 
 with tab2:
 
     uploaded_audio = st.file_uploader(
 
-        "🎵 اختاري تسجيلًا من الهاتف",
+        "📁 اختاري تسجيلًا من ملفات الهاتف",
 
         type=[
             "wav",
             "mp3",
             "m4a",
             "ogg",
-            "webm"
+            "webm",
+            "aac",
+            "flac"
         ],
 
         key="audio_upload"
@@ -324,7 +303,13 @@ with tab2:
 
     if uploaded_audio is not None:
 
-        if plates:
+        if not plates:
+
+            st.warning(
+                "ارفعي ملف Excel أولًا."
+            )
+
+        else:
 
             audio_bytes = uploaded_audio.read()
 
@@ -332,42 +317,52 @@ with tab2:
                 audio_bytes
             )
 
-            matches = find_matching_plates(
+            # عرض النص الذي فهمه النظام
+            if spoken_text:
+
+                st.write(
+                    f"🎙️ **النص الذي تم التعرف عليه:** {spoken_text}"
+                )
+
+            else:
+
+                st.warning(
+                    "لم يتمكن النظام من فهم التسجيل."
+                )
+
+            # البحث عن تطابق كامل فقط
+            matched_plate = find_exact_plate(
                 spoken_text,
                 plates
             )
 
-            st.session_state.matches = matches
+            st.session_state.matched_plate = (
+                matched_plate
+            )
 
 
 # =========================
-# عرض النتائج
+# عرض النتيجة
 # =========================
 
 st.divider()
 
-st.header("📋 اللوحات المتطابقة")
+st.header("📋 النتيجة")
 
 
-if "matches" not in st.session_state:
+if "matched_plate" not in st.session_state:
 
-    st.session_state.matches = []
+    st.session_state.matched_plate = None
 
 
-if st.session_state.matches:
+if st.session_state.matched_plate:
 
     st.success(
-        f"تم العثور على {len(st.session_state.matches)} لوحة مطابقة."
+        f"✅ اللوحة {st.session_state.matched_plate} موجودة في الملف"
     )
-
-    for plate in st.session_state.matches:
-
-        st.write(
-            f"🚨 **{plate}**"
-        )
 
 else:
 
     st.info(
-        "لا توجد مطابقات حتى الآن."
+        "لا توجد لوحة مطابقة في الملف."
     )
