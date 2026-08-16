@@ -138,7 +138,6 @@ def audio_to_text(audio_bytes):
 
         with sr.AudioFile(wav_file) as source:
 
-            # تقليل الضوضاء البسيطة
             recognizer.adjust_for_ambient_noise(
                 source,
                 duration=0.3
@@ -177,7 +176,6 @@ def find_exact_plate(spoken_text, plates):
     if not spoken_text or not plates:
         return None
 
-    # تنظيف الكلام المنطوق
     spoken_clean = clean_text(
         spoken_text
     )
@@ -192,22 +190,37 @@ def find_exact_plate(spoken_text, plates):
             plate
         )
 
-        # لازم يكون التطابق كامل 100%
         if spoken_clean == plate_clean:
 
-            # نرجع اللوحة الأصلية من Excel
+            # إرجاع اللوحة الأصلية
+            # كما هي مكتوبة في Excel
             return plate
 
     return None
 
 
 # =========================
-# واجهة التسجيل
+# تهيئة Session State
+# =========================
+
+if "matched_plate" not in st.session_state:
+
+    st.session_state.matched_plate = None
+
+
+if "spoken_text" not in st.session_state:
+
+    st.session_state.spoken_text = ""
+
+
+# =========================
+# مصدر التسجيل
 # =========================
 
 st.divider()
 
 st.header("🎙️ مصدر التسجيل")
+
 
 tab1, tab2 = st.tabs(
     [
@@ -217,9 +230,9 @@ tab1, tab2 = st.tabs(
 )
 
 
-# =========================
-# تسجيل من التطبيق
-# =========================
+# =========================================================
+# التسجيل من التطبيق
+# =========================================================
 
 with tab1:
 
@@ -244,7 +257,7 @@ with tab1:
         if not plates:
 
             st.warning(
-                "ارفعي ملف Excel أولًا."
+                "⚠️ ارفعي ملف Excel أولًا."
             )
 
         else:
@@ -253,20 +266,10 @@ with tab1:
                 audio_bytes
             )
 
-            # عرض النص الذي فهمه النظام
-            if spoken_text:
+            st.session_state.spoken_text = (
+                spoken_text
+            )
 
-                st.write(
-                    f"🎙️ **النص الذي تم التعرف عليه:** {spoken_text}"
-                )
-
-            else:
-
-                st.warning(
-                    "لم يتمكن النظام من فهم التسجيل."
-                )
-
-            # البحث عن تطابق كامل
             matched_plate = find_exact_plate(
                 spoken_text,
                 plates
@@ -277,25 +280,20 @@ with tab1:
             )
 
 
-# =========================
+# =========================================================
 # رفع تسجيل من الجوال
-# =========================
+# =========================================================
 
 with tab2:
 
     uploaded_audio = st.file_uploader(
 
-        "📁 اختاري تسجيلًا من ملفات الهاتف",
+        "📁 اختاري أي ملف صوتي من ملفات الهاتف",
 
-        type=[
-            "wav",
-            "mp3",
-            "m4a",
-            "ogg",
-            "webm",
-            "aac",
-            "flac"
-        ],
+        # بدون تحديد امتدادات
+        # حتى يفتح منتقي ملفات الهاتف
+        # بدون فلترة الامتدادات
+        type=None,
 
         key="audio_upload"
 
@@ -306,7 +304,7 @@ with tab2:
         if not plates:
 
             st.warning(
-                "ارفعي ملف Excel أولًا."
+                "⚠️ ارفعي ملف Excel أولًا."
             )
 
         else:
@@ -317,20 +315,10 @@ with tab2:
                 audio_bytes
             )
 
-            # عرض النص الذي فهمه النظام
-            if spoken_text:
+            st.session_state.spoken_text = (
+                spoken_text
+            )
 
-                st.write(
-                    f"🎙️ **النص الذي تم التعرف عليه:** {spoken_text}"
-                )
-
-            else:
-
-                st.warning(
-                    "لم يتمكن النظام من فهم التسجيل."
-                )
-
-            # البحث عن تطابق كامل فقط
             matched_plate = find_exact_plate(
                 spoken_text,
                 plates
@@ -339,6 +327,20 @@ with tab2:
             st.session_state.matched_plate = (
                 matched_plate
             )
+
+
+# =========================
+# عرض النص الذي تم فهمه
+# =========================
+
+if st.session_state.spoken_text:
+
+    st.divider()
+
+    st.write(
+        f"🎙️ **النظام فهم:** "
+        f"{st.session_state.spoken_text}"
+    )
 
 
 # =========================
@@ -350,19 +352,23 @@ st.divider()
 st.header("📋 النتيجة")
 
 
-if "matched_plate" not in st.session_state:
-
-    st.session_state.matched_plate = None
-
-
 if st.session_state.matched_plate:
 
     st.success(
-        f"✅ اللوحة {st.session_state.matched_plate} موجودة في الملف"
+        f"✅ {st.session_state.matched_plate} "
+        f"موجودة في الملف"
     )
 
 else:
 
-    st.info(
-        "لا توجد لوحة مطابقة في الملف."
-    )
+    if st.session_state.spoken_text:
+
+        st.error(
+            "❌ اللوحة غير موجودة في الملف"
+        )
+
+    else:
+
+        st.info(
+            "🎙️ سجلي أو ارفعي تسجيلًا للبحث عن اللوحة."
+        )
