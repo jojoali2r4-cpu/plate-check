@@ -82,6 +82,7 @@ audio = mic_recorder(
     just_once=True,
     use_container_width=True,
     key="car_plate_recorder"
+    format="wav"
 )
 
 
