@@ -3,14 +3,15 @@ import pandas as pd
 import speech_recognition as sr
 import re
 import io
+import time
 
 from streamlit_mic_recorder import mic_recorder
 from pydub import AudioSegment
 
 
-# =========================
+# =========================================================
 # إعداد الصفحة
-# =========================
+# =========================================================
 
 st.set_page_config(
     page_title="نظام فحص لوحات السيارات",
@@ -21,9 +22,20 @@ st.set_page_config(
 st.title("🚗 نظام فحص لوحات السيارات")
 
 
-# =========================
+# =========================================================
+# Session State
+# =========================================================
+
+if "matched_plate" not in st.session_state:
+    st.session_state.matched_plate = None
+
+if "spoken_text" not in st.session_state:
+    st.session_state.spoken_text = ""
+
+
+# =========================================================
 # رفع ملف Excel
-# =========================
+# =========================================================
 
 uploaded_file = st.file_uploader(
     "📁 ارفعي ملف اللوحات",
@@ -32,22 +44,107 @@ uploaded_file = st.file_uploader(
 
 plates = []
 
+
 if uploaded_file is not None:
 
     try:
 
         df = pd.read_excel(uploaded_file)
 
-        if "اللوحه" not in df.columns:
+        # ---------------------------------------------
+        # تنظيف أسماء الأعمدة
+        # ---------------------------------------------
+
+        cleaned_columns = {}
+
+        for column in df.columns:
+
+            clean_column = str(column).strip()
+
+            # إزالة المسافات
+            clean_column = clean_column.replace(
+                " ",
+                ""
+            )
+
+            # توحيد ة / ه
+            clean_column = clean_column.replace(
+                "ة",
+                "ه"
+            )
+
+            # توحيد أ / إ / آ
+            clean_column = clean_column.replace(
+                "أ",
+                "ا"
+            )
+
+            clean_column = clean_column.replace(
+                "إ",
+                "ا"
+            )
+
+            clean_column = clean_column.replace(
+                "آ",
+                "ا"
+            )
+
+            cleaned_columns[column] = clean_column
+
+
+        # ---------------------------------------------
+        # البحث عن عمود اللوحات
+        # ---------------------------------------------
+
+        plate_column = None
+
+        possible_names = [
+            "اللوحه",
+            "لوحه",
+            "اللوحات",
+            "لوحات",
+            "رقماللوحه",
+            "رقماللوحات",
+            "رقماللوحة",
+            "رقماللوحات"
+        ]
+
+        for original_column, clean_column in cleaned_columns.items():
+
+            if clean_column in possible_names:
+
+                plate_column = original_column
+
+                break
+
+
+        # ---------------------------------------------
+        # إذا لم يتم العثور على العمود
+        # ---------------------------------------------
+
+        if plate_column is None:
 
             st.error(
-                "لم يتم العثور على عمود «اللوحه» في ملف Excel."
+                "❌ لم يتم العثور على عمود «اللوحة» في ملف Excel."
             )
+
+            st.write(
+                "أسماء الأعمدة الموجودة في الملف:"
+            )
+
+            st.write(
+                list(df.columns)
+            )
+
 
         else:
 
+            # -----------------------------------------
+            # قراءة اللوحات
+            # -----------------------------------------
+
             plates = (
-                df["اللوحه"]
+                df[plate_column]
                 .dropna()
                 .astype(str)
                 .str.strip()
@@ -55,8 +152,9 @@ if uploaded_file is not None:
             )
 
             st.success(
-                f"تم تحميل {len(plates)} لوحة بنجاح."
+                f"✅ تم تحميل {len(plates)} لوحة بنجاح."
             )
+
 
     except Exception as e:
 
@@ -65,9 +163,9 @@ if uploaded_file is not None:
         )
 
 
-# =========================
-# تحويل الأرقام العربية
-# =========================
+# =========================================================
+# تحويل الأرقام العربية إلى إنجليزية
+# =========================================================
 
 def normalize_numbers(text):
 
@@ -79,22 +177,22 @@ def normalize_numbers(text):
         english_numbers
     )
 
-    return text.translate(table)
+    return str(text).translate(table)
 
 
-# =========================
+# =========================================================
 # تنظيف النص
-# =========================
+# =========================================================
 
 def clean_text(text):
 
-    text = normalize_numbers(str(text))
+    text = normalize_numbers(text)
 
     text = text.lower()
 
-    # إزالة المسافات والعلامات فقط
+    # إزالة المسافات والعلامات
     text = re.sub(
-        r"[\s\-_,.!؟،]+",
+        r"[\s\-_,.!؟،:؛]+",
         "",
         text
     )
@@ -102,87 +200,214 @@ def clean_text(text):
     return text
 
 
-# =========================
-# تحويل الصوت إلى WAV
-# =========================
+# =========================================================
+# تجهيز الصوت
+# =========================================================
 
-def convert_to_wav(audio_bytes):
+def prepare_audio(audio_bytes):
 
-    audio = AudioSegment.from_file(
-        io.BytesIO(audio_bytes)
-    )
+    try:
 
-    wav_buffer = io.BytesIO()
+        audio = AudioSegment.from_file(
+            io.BytesIO(audio_bytes)
+        )
 
-    audio.export(
-        wav_buffer,
-        format="wav"
-    )
+        # تحويل إلى Mono
+        audio = audio.set_channels(1)
 
-    wav_buffer.seek(0)
+        # 16 kHz
+        audio = audio.set_frame_rate(16000)
 
-    return wav_buffer
+        # 16 bit
+        audio = audio.set_sample_width(2)
+
+        return audio
+
+    except Exception as e:
+
+        st.error(
+            f"❌ حدث خطأ أثناء قراءة الملف الصوتي: {e}"
+        )
+
+        return None
 
 
-# =========================
+# =========================================================
 # تحويل الصوت إلى نص
-# =========================
+# =========================================================
 
 def audio_to_text(audio_bytes):
 
     recognizer = sr.Recognizer()
 
-    try:
+    audio = prepare_audio(
+        audio_bytes
+    )
 
-        wav_file = convert_to_wav(audio_bytes)
-
-        with sr.AudioFile(wav_file) as source:
-
-            recognizer.adjust_for_ambient_noise(
-                source,
-                duration=0.3
-            )
-
-            audio_data = recognizer.record(
-                source
-            )
-
-        text = recognizer.recognize_google(
-            audio_data,
-            language="ar-SA"
-        )
-
-        return text
-
-    except sr.UnknownValueError:
+    if audio is None:
 
         return ""
 
-    except Exception as e:
-
-        st.error(
-            f"حدث خطأ أثناء تحويل الصوت إلى نص: {e}"
-        )
+    if len(audio) == 0:
 
         return ""
 
 
-# =========================
+    # ---------------------------------------------
+    # تقسيم الصوت إلى مقاطع
+    # ---------------------------------------------
+
+    chunk_length = 8000  # 8 ثواني
+
+    chunks = []
+
+    for start in range(
+        0,
+        len(audio),
+        chunk_length
+    ):
+
+        end = min(
+            start + chunk_length,
+            len(audio)
+        )
+
+        chunk = audio[start:end]
+
+        chunks.append(chunk)
+
+
+    recognized_parts = []
+
+
+    # ---------------------------------------------
+    # شريط التقدم
+    # ---------------------------------------------
+
+    progress = st.progress(
+        0,
+        text="🎙️ جاري تحويل التسجيل إلى نص..."
+    )
+
+
+    # ---------------------------------------------
+    # التعرف على المقاطع
+    # ---------------------------------------------
+
+    for index, chunk in enumerate(chunks):
+
+        try:
+
+            wav_buffer = io.BytesIO()
+
+            chunk.export(
+                wav_buffer,
+                format="wav"
+            )
+
+            wav_buffer.seek(0)
+
+
+            with sr.AudioFile(
+                wav_buffer
+            ) as source:
+
+                audio_data = recognizer.record(
+                    source
+                )
+
+
+            text = ""
+
+
+            # -----------------------------------------
+            # إعادة المحاولة في حالة مشكلة الاتصال
+            # -----------------------------------------
+
+            for attempt in range(3):
+
+                try:
+
+                    text = recognizer.recognize_google(
+                        audio_data,
+                        language="ar-SA"
+                    )
+
+                    break
+
+                except sr.RequestError:
+
+                    if attempt < 2:
+
+                        time.sleep(1)
+
+                    else:
+
+                        text = ""
+
+
+            if text:
+
+                recognized_parts.append(
+                    text
+                )
+
+
+        except sr.UnknownValueError:
+
+            pass
+
+
+        except sr.RequestError:
+
+            pass
+
+
+        except Exception:
+
+            pass
+
+
+        progress.progress(
+            (index + 1) / len(chunks),
+            text="🎙️ جاري تحويل التسجيل إلى نص..."
+        )
+
+
+    progress.empty()
+
+
+    return " ".join(
+        recognized_parts
+    ).strip()
+
+
+# =========================================================
 # البحث عن اللوحة
-# =========================
+# =========================================================
 
-def find_exact_plate(spoken_text, plates):
+def find_exact_plate(
+    spoken_text,
+    plates
+):
 
-    if not spoken_text or not plates:
+    if not spoken_text:
+
         return None
+
+    if not plates:
+
+        return None
+
 
     spoken_clean = clean_text(
         spoken_text
     )
 
-    # =====================================
+
+    # =====================================================
     # مطابقة كاملة فقط
-    # =====================================
+    # =====================================================
 
     for plate in plates:
 
@@ -190,32 +415,70 @@ def find_exact_plate(spoken_text, plates):
             plate
         )
 
+
+        # تطابق كامل 100%
         if spoken_clean == plate_clean:
 
-            # إرجاع اللوحة الأصلية
-            # كما هي مكتوبة في Excel
+            # إرجاع نفس اللوحة الموجودة في Excel
             return plate
+
 
     return None
 
 
-# =========================
-# تهيئة Session State
-# =========================
+# =========================================================
+# معالجة التسجيل
+# =========================================================
 
-if "matched_plate" not in st.session_state:
+def process_audio(audio_bytes):
 
+    if not plates:
+
+        st.warning(
+            "⚠️ ارفعي ملف Excel أولًا."
+        )
+
+        return
+
+
+    # مسح النتيجة القديمة
     st.session_state.matched_plate = None
-
-
-if "spoken_text" not in st.session_state:
 
     st.session_state.spoken_text = ""
 
 
-# =========================
+    # ---------------------------------------------
+    # تحويل الصوت إلى نص
+    # ---------------------------------------------
+
+    spoken_text = audio_to_text(
+        audio_bytes
+    )
+
+
+    st.session_state.spoken_text = (
+        spoken_text
+    )
+
+
+    # ---------------------------------------------
+    # البحث عن تطابق كامل
+    # ---------------------------------------------
+
+    matched_plate = find_exact_plate(
+        spoken_text,
+        plates
+    )
+
+
+    st.session_state.matched_plate = (
+        matched_plate
+    )
+
+
+# =========================================================
 # مصدر التسجيل
-# =========================
+# =========================================================
 
 st.divider()
 
@@ -231,7 +494,7 @@ tab1, tab2 = st.tabs(
 
 
 # =========================================================
-# التسجيل من التطبيق
+# تسجيل من التطبيق
 # =========================================================
 
 with tab1:
@@ -250,34 +513,14 @@ with tab1:
 
     )
 
+
     if audio_recorded is not None:
 
         audio_bytes = audio_recorded["bytes"]
 
-        if not plates:
-
-            st.warning(
-                "⚠️ ارفعي ملف Excel أولًا."
-            )
-
-        else:
-
-            spoken_text = audio_to_text(
-                audio_bytes
-            )
-
-            st.session_state.spoken_text = (
-                spoken_text
-            )
-
-            matched_plate = find_exact_plate(
-                spoken_text,
-                plates
-            )
-
-            st.session_state.matched_plate = (
-                matched_plate
-            )
+        process_audio(
+            audio_bytes
+        )
 
 
 # =========================================================
@@ -290,48 +533,26 @@ with tab2:
 
         "📁 اختاري أي ملف صوتي من ملفات الهاتف",
 
-        # بدون تحديد امتدادات
-        # حتى يفتح منتقي ملفات الهاتف
-        # بدون فلترة الامتدادات
+        # لا يوجد فلتر للامتداد
         type=None,
 
         key="audio_upload"
 
     )
 
+
     if uploaded_audio is not None:
 
-        if not plates:
+        audio_bytes = uploaded_audio.read()
 
-            st.warning(
-                "⚠️ ارفعي ملف Excel أولًا."
-            )
-
-        else:
-
-            audio_bytes = uploaded_audio.read()
-
-            spoken_text = audio_to_text(
-                audio_bytes
-            )
-
-            st.session_state.spoken_text = (
-                spoken_text
-            )
-
-            matched_plate = find_exact_plate(
-                spoken_text,
-                plates
-            )
-
-            st.session_state.matched_plate = (
-                matched_plate
-            )
+        process_audio(
+            audio_bytes
+        )
 
 
-# =========================
-# عرض النص الذي تم فهمه
-# =========================
+# =========================================================
+# عرض النص الذي فهمه النظام
+# =========================================================
 
 if st.session_state.spoken_text:
 
@@ -343,9 +564,9 @@ if st.session_state.spoken_text:
     )
 
 
-# =========================
+# =========================================================
 # عرض النتيجة
-# =========================
+# =========================================================
 
 st.divider()
 
