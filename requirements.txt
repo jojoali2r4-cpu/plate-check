@@ -3,4 +3,5 @@ pandas
 openpyxl
 streamlit-mic-recorder
 rapidfuzz
+pydub
 SpeechRecognition
