@@ -3,9 +3,9 @@ import pandas as pd
 import speech_recognition as sr
 import re
 import io
-
-from streamlit_mic_recorder import mic_recorder
 from pydub import AudioSegment
+from streamlit_mic_recorder import mic_recorder
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 # =========================================================
@@ -22,115 +22,167 @@ st.title("🚗 نظام فحص لوحات السيارات")
 
 
 # =========================================================
-# تحويل الأرقام العربية
+# تطبيع الأرقام
 # =========================================================
 
 def normalize_numbers(text):
+
+    if not text:
+        return ""
+
+    arabic_numbers = "٠١٢٣٤٥٦٧٨٩"
+    english_numbers = "0123456789"
+
     table = str.maketrans(
-        "٠١٢٣٤٥٦٧٨٩",
-        "0123456789"
+        arabic_numbers,
+        english_numbers
     )
+
     return str(text).translate(table)
 
 
 # =========================================================
-# إزالة التشكيل
+# تطبيع الحروف العربية
 # =========================================================
 
-def remove_diacritics(text):
-    return re.sub(
-        r"[\u064B-\u065F\u0670]",
-        "",
-        str(text)
-    )
+def normalize_arabic_letters(text):
+
+    if not text:
+        return ""
+
+    replacements = {
+        "أ": "ا",
+        "إ": "ا",
+        "آ": "ا",
+        "ٱ": "ا",
+        "ى": "ي",
+        "ة": "ه",
+        "ؤ": "و",
+        "ئ": "ي",
+    }
+
+    text = str(text)
+
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+
+    return text
 
 
 # =========================================================
-# تنظيف اللوحة
+# تنظيف النص
 # =========================================================
 
-def normalize_plate(text):
+def clean_text(text):
 
     text = normalize_numbers(text)
-    text = remove_diacritics(text)
+    text = normalize_arabic_letters(text)
 
-    text = text.replace("أ", "ا")
-    text = text.replace("إ", "ا")
-    text = text.replace("آ", "ا")
+    text = text.lower()
 
     text = re.sub(
-        r"[\s\-_,.!؟،:؛]+",
+        r"[\s\-_,.!؟،:؛/\\]+",
         "",
         text
     )
 
-    return text.strip()
+    return text
 
 
 # =========================================================
-# قاموس الحروف
+# أسماء الحروف العربية
 # =========================================================
 
-LETTER_WORDS = {
+LETTER_NAMES = {
 
     "الف": "ا",
-    "ألف": "ا",
+    "الفا": "ا",
+
     "باء": "ب",
     "با": "ب",
+
     "تاء": "ت",
     "تا": "ت",
+
     "ثاء": "ث",
     "ثا": "ث",
+
     "جيم": "ج",
+    "جيم": "ج",
+
     "حاء": "ح",
     "حا": "ح",
+
     "خاء": "خ",
     "خا": "خ",
+
     "دال": "د",
+    "دا": "د",
+
     "ذال": "ذ",
+    "ذا": "ذ",
+
     "راء": "ر",
     "را": "ر",
+
     "زاي": "ز",
     "زا": "ز",
+
     "سين": "س",
-    "سي": "س",
+    "سا": "س",
+
     "شين": "ش",
-    "شي": "ش",
+    "شا": "ش",
+
     "صاد": "ص",
     "صا": "ص",
+
     "ضاد": "ض",
     "ضا": "ض",
+
     "طاء": "ط",
     "طا": "ط",
+
     "ظاء": "ظ",
     "ظا": "ظ",
+
     "عين": "ع",
-    "عي": "ع",
+    "عا": "ع",
+
     "غين": "غ",
-    "غي": "غ",
+    "غا": "غ",
+
     "فاء": "ف",
     "فا": "ف",
+
     "قاف": "ق",
     "قا": "ق",
+
     "كاف": "ك",
     "كا": "ك",
+
     "لام": "ل",
     "لا": "ل",
+
     "ميم": "م",
-    "مي": "م",
+    "ما": "م",
+
     "نون": "ن",
-    "نو": "ن",
+    "نا": "ن",
+
     "هاء": "ه",
     "ها": "ه",
+
     "واو": "و",
     "وا": "و",
+
     "ياء": "ي",
     "يا": "ي",
 }
 
 
 # =========================================================
-# قاموس الأرقام
+# أسماء الأرقام العربية
 # =========================================================
 
 NUMBER_WORDS = {
@@ -140,15 +192,14 @@ NUMBER_WORDS = {
     "واحد": "1",
     "واحدة": "1",
 
-    "اثنين": "2",
     "اثنان": "2",
+    "اثنين": "2",
+    "اثنتين": "2",
     "اتنين": "2",
+    "اتنان": "2",
 
     "ثلاثة": "3",
-    "ثلاثه": "3",
     "ثلاث": "3",
-    "تلاتة": "3",
-    "تلاته": "3",
 
     "اربعة": "4",
     "أربعة": "4",
@@ -157,7 +208,6 @@ NUMBER_WORDS = {
 
     "خمسة": "5",
     "خمسه": "5",
-    "خمس": "5",
 
     "ستة": "6",
     "سته": "6",
@@ -165,7 +215,6 @@ NUMBER_WORDS = {
 
     "سبعة": "7",
     "سبعه": "7",
-    "سبع": "7",
 
     "ثمانية": "8",
     "ثمانيه": "8",
@@ -174,62 +223,135 @@ NUMBER_WORDS = {
 
     "تسعة": "9",
     "تسعه": "9",
-    "تسع": "9",
 }
 
 
 # =========================================================
-# الكلمات التي لا تعتبر حروفًا
+# تحويل أسماء الحروف إلى حروف
 # =========================================================
 
-IGNORE_WORDS = {
-    "رقم",
-    "الرقم",
-    "لوحة",
-    "اللوحة",
-    "لوحه",
-    "اللوحه",
-    "حرف",
-    "حروف",
-    "موقع",
-    "موجود",
-    "في",
-    "من",
-    "على",
-    "و",
-    "هي",
-    "هو",
-}
+def convert_spoken_letters(text):
+
+    if not text:
+        return ""
+
+    text = normalize_numbers(text)
+    text = normalize_arabic_letters(text)
+
+    text = re.sub(
+        r"[،,؛;.!؟?_\-]+",
+        " ",
+        text
+    )
+
+    words = text.split()
+
+    result = []
+
+    for word in words:
+
+        cleaned = clean_text(word)
+
+        if cleaned in LETTER_NAMES:
+
+            result.append(
+                LETTER_NAMES[cleaned]
+            )
+
+        else:
+
+            # الحروف المكتوبة مباشرة
+            chars = re.findall(
+                r"[^\W\d_]",
+                word,
+                flags=re.UNICODE
+            )
+
+            if len(chars) > 0:
+                result.extend(chars)
+
+    return "".join(result)
 
 
 # =========================================================
-# تحويل كلمة إلى حرف
+# تحويل كلمات الأرقام إلى أرقام
 # =========================================================
 
-def word_to_letter(word):
+def convert_spoken_numbers(text):
 
-    word = remove_diacritics(word).strip()
+    if not text:
+        return ""
 
-    word = word.replace("أ", "ا")
-    word = word.replace("إ", "ا")
-    word = word.replace("آ", "ا")
+    text = normalize_numbers(text)
 
-    return LETTER_WORDS.get(word)
+    words = text.split()
+
+    result = []
+
+    for word in words:
+
+        cleaned = clean_text(word)
+
+        if cleaned in NUMBER_WORDS:
+
+            result.append(
+                NUMBER_WORDS[cleaned]
+            )
+
+    return "".join(result)
 
 
 # =========================================================
-# تحويل كلمة إلى رقم
+# تجهيز اللوحة من Excel
 # =========================================================
 
-def word_to_digit(word):
+def normalize_plate(plate):
 
-    word = remove_diacritics(word).strip()
+    if plate is None:
+        return ""
 
-    word = word.replace("أ", "ا")
-    word = word.replace("إ", "ا")
-    word = word.replace("آ", "ا")
+    plate = normalize_numbers(str(plate))
+    plate = normalize_arabic_letters(plate)
 
-    return NUMBER_WORDS.get(word)
+    plate = re.sub(
+        r"[\s\-_,.!؟،:؛/\\]+",
+        "",
+        plate
+    )
+
+    return plate.strip()
+
+
+# =========================================================
+# استخراج 3 حروف + 4 أرقام
+# =========================================================
+
+def get_plate_parts(plate):
+
+    normalized = normalize_plate(plate)
+
+    letters = "".join(
+        re.findall(
+            r"[^\W\d_]",
+            normalized,
+            flags=re.UNICODE
+        )
+    )
+
+    numbers = "".join(
+        re.findall(
+            r"\d",
+            normalized
+        )
+    )
+
+    if (
+        len(letters) == 3
+        and len(numbers) == 4
+    ):
+        return letters, numbers
+
+    return None, None
 
 
 # =========================================================
@@ -243,8 +365,10 @@ def convert_to_wav(audio_bytes):
     )
 
     audio = audio.set_channels(1)
-    audio = audio.set_frame_rate(16000)
-    audio = audio.set_sample_width(2)
+
+    audio = audio.set_frame_rate(
+        16000
+    )
 
     wav_buffer = io.BytesIO()
 
@@ -259,20 +383,27 @@ def convert_to_wav(audio_bytes):
 
 
 # =========================================================
-# تحويل الصوت إلى نص
+# تحويل مقطع واحد إلى نص
 # =========================================================
 
-def audio_to_text(audio_bytes):
+def recognize_chunk(chunk):
 
     recognizer = sr.Recognizer()
 
+    wav_buffer = io.BytesIO()
+
+    chunk.export(
+        wav_buffer,
+        format="wav"
+    )
+
+    wav_buffer.seek(0)
+
     try:
 
-        wav_file = convert_to_wav(
-            audio_bytes
-        )
-
-        with sr.AudioFile(wav_file) as source:
+        with sr.AudioFile(
+            wav_buffer
+        ) as source:
 
             audio_data = recognizer.record(
                 source
@@ -289,212 +420,471 @@ def audio_to_text(audio_bytes):
 
         return ""
 
+    except Exception:
+
+        return ""
+
+
+# =========================================================
+# تحويل التسجيل الطويل إلى نص
+# =========================================================
+
+def audio_to_text_long(audio_bytes):
+
+    try:
+
+        audio = AudioSegment.from_file(
+            io.BytesIO(audio_bytes)
+        )
+
+        # التسجيل إلى أجزاء 20 ثانية
+        chunk_length = 20 * 1000
+
+        # تداخل 4 ثواني حتى لا تضيع لوحة
+        # عند نهاية وبداية مقطعين
+        overlap = 4 * 1000
+
+        chunks = []
+
+        start = 0
+
+        while start < len(audio):
+
+            end = min(
+                start + chunk_length,
+                len(audio)
+            )
+
+            chunk = audio[
+                max(0, start - overlap):end
+            ]
+
+            chunks.append(chunk)
+
+            start += (
+                chunk_length - overlap
+            )
+
+        results = [""] * len(chunks)
+
+        # تشغيل عدة مقاطع في نفس الوقت
+        with ThreadPoolExecutor(
+            max_workers=4
+        ) as executor:
+
+            futures = {
+                executor.submit(
+                    recognize_chunk,
+                    chunk
+                ): i
+                for i, chunk in enumerate(chunks)
+            }
+
+            for future in as_completed(
+                futures
+            ):
+
+                index = futures[future]
+
+                try:
+
+                    results[index] = (
+                        future.result()
+                    )
+
+                except Exception:
+
+                    results[index] = ""
+
+        final_text = " ".join(
+            r for r in results if r
+        )
+
+        return final_text
+
     except Exception as e:
 
         st.error(
-            f"حدث خطأ أثناء تحويل الصوت إلى نص: {e}"
+            f"حدث خطأ أثناء معالجة التسجيل: {e}"
         )
 
         return ""
 
 
 # =========================================================
-# تقسيم الكلام
+# استخراج مجموعات الأرقام
 # =========================================================
 
-def tokenize_text(text):
+def extract_number_groups(text):
+
+    if not text:
+        return []
 
     text = normalize_numbers(text)
-    text = remove_diacritics(text)
 
-    return re.findall(
-        r"\d+|[ء-ي]+",
+    groups = []
+
+    # -----------------------------------------------------
+    # أرقام متصلة
+    # -----------------------------------------------------
+
+    for match in re.finditer(
+        r"\d{4}",
         text
-    )
+    ):
 
+        groups.append(
+            match.group()
+        )
 
-# =========================================================
-# استخراج 4 أرقام متتالية
-# =========================================================
+    # -----------------------------------------------------
+    # الأرقام الموجودة ككلمات
+    # -----------------------------------------------------
 
-def extract_four_digits(tokens, start):
+    word_number_sequences = []
 
-    digits = ""
-    end = start
+    words = text.split()
 
-    while end < len(tokens) and len(digits) < 4:
+    current = ""
 
-        token = tokens[end]
+    for word in words:
 
-        # رقم مكتوب مباشرة
-        if re.fullmatch(r"\d+", token):
+        cleaned = clean_text(word)
 
-            digits += token
+        if cleaned in NUMBER_WORDS:
+
+            current += NUMBER_WORDS[cleaned]
+
+            if len(current) == 4:
+
+                word_number_sequences.append(
+                    current
+                )
+
+                current = ""
+
+            elif len(current) > 4:
+
+                current = ""
 
         else:
 
-            digit = word_to_digit(token)
+            if current:
+                current = ""
 
-            if digit is None:
-                break
+    groups.extend(
+        word_number_sequences
+    )
 
-            digits += digit
+    # -----------------------------------------------------
+    # أرقام مفصولة
+    # مثال:
+    # 24 34
+    # -----------------------------------------------------
 
-        end += 1
+    tokens = re.findall(
+        r"\d+",
+        text
+    )
 
-    # لازم بالضبط 4 أرقام
-    if len(digits) == 4:
+    for i in range(
+        len(tokens)
+    ):
 
-        return digits, end
+        # رقم 4 خانات
+        if len(tokens[i]) == 4:
 
-    return None, start
+            groups.append(
+                tokens[i]
+            )
 
+        # 24 + 34
+        if (
+            len(tokens[i]) == 2
+            and
+            i + 1 < len(tokens)
+            and
+            len(tokens[i + 1]) == 2
+        ):
 
-# =========================================================
-# استخراج 3 حروف قبل الأرقام
-# =========================================================
+            groups.append(
+                tokens[i]
+                + tokens[i + 1]
+            )
 
-def extract_three_letters(tokens, start):
+        # 2 + 4 + 3 + 4
+        if (
+            len(tokens[i]) == 1
+            and
+            i + 3 < len(tokens)
+            and
+            len(tokens[i + 1]) == 1
+            and
+            len(tokens[i + 2]) == 1
+            and
+            len(tokens[i + 3]) == 1
+        ):
 
-    letters = []
-    i = start
+            groups.append(
+                tokens[i]
+                + tokens[i + 1]
+                + tokens[i + 2]
+                + tokens[i + 3]
+            )
 
-    while i < len(tokens) and len(letters) < 3:
+    # إزالة التكرار
+    groups = list(
+        dict.fromkeys(groups)
+    )
 
-        token = tokens[i]
-
-        if token in IGNORE_WORDS:
-
-            i += 1
-            continue
-
-        letter = word_to_letter(token)
-
-        if letter is None:
-
-            break
-
-        letters.append(letter)
-
-        i += 1
-
-    if len(letters) == 3:
-
-        return "".join(letters), i
-
-    return None, start
+    return groups
 
 
 # =========================================================
 # استخراج اللوحات من الكلام
 # =========================================================
 
-def extract_spoken_plates(spoken_text):
+def find_spoken_plates(
+    spoken_text,
+    plates
+):
 
-    tokens = tokenize_text(
+    if not spoken_text:
+        return []
+
+    if not plates:
+        return []
+
+    spoken_text = normalize_numbers(
         spoken_text
     )
 
-    plates_found = []
+    spoken_text = normalize_arabic_letters(
+        spoken_text
+    )
 
-    i = 0
+    # -----------------------------------------------------
+    # تجهيز لوحات Excel
+    # -----------------------------------------------------
 
-    while i < len(tokens):
-
-        # نحاول إيجاد 3 حروف
-        letters, after_letters = (
-            extract_three_letters(
-                tokens,
-                i
-            )
-        )
-
-        if letters is not None:
-
-            # بعد الحروف مباشرة نبحث عن 4 أرقام
-            digits, after_digits = (
-                extract_four_digits(
-                    tokens,
-                    after_letters
-                )
-            )
-
-            if digits is not None:
-
-                plate = letters + digits
-
-                # تأكيد نهائي:
-                # 3 حروف + 4 أرقام فقط
-                if re.fullmatch(
-                    r"[ء-ي]{3}\d{4}",
-                    plate
-                ):
-
-                    plates_found.append(
-                        plate
-                    )
-
-                    i = after_digits
-
-                    continue
-
-        i += 1
-
-    # إزالة التكرار
-    unique = []
-
-    for plate in plates_found:
-
-        if plate not in unique:
-            unique.append(plate)
-
-    return unique
-
-
-# =========================================================
-# تطبيع كل لوحات Excel
-# =========================================================
-
-def prepare_excel_plates(plates):
-
-    prepared = []
+    excel_plates = []
 
     for original in plates:
 
-        normalized = normalize_plate(
+        letters, numbers = get_plate_parts(
             original
         )
 
-        # اللوحة الصحيحة يجب أن تكون:
-        # 3 حروف + 4 أرقام
-        if re.fullmatch(
-            r"[ء-ي]{3}\d{4}",
-            normalized
+        if (
+            letters
+            and numbers
         ):
 
-            prepared.append(
-                normalized
+            excel_plates.append(
+                {
+                    "original": str(
+                        original
+                    ).strip(),
+
+                    "letters": letters,
+
+                    "numbers": numbers,
+
+                    "normalized": normalize_plate(
+                        original
+                    )
+                }
             )
 
-    return prepared
+    # -----------------------------------------------------
+    # الأرقام الموجودة في الكلام
+    # -----------------------------------------------------
 
-
-# =========================================================
-# البحث عن اللوحة نفسها فقط
-# =========================================================
-
-def plate_exists(
-    spoken_plate,
-    excel_plates
-):
-
-    spoken_plate = normalize_plate(
-        spoken_plate
+    number_groups = extract_number_groups(
+        spoken_text
     )
 
-    for excel_plate in excel_plates:
+    results = []
 
-        if spoken_plate == excel_plate:
+    # -----------------------------------------------------
+    # البحث عن كل رقم
+    # -----------------------------------------------------
+
+    for number in number_groups:
+
+        # كل لوحات Excel التي تحمل نفس الرقم
+        possible_excel = [
+            p
+            for p in excel_plates
+            if p["numbers"] == number
+        ]
+
+        # -------------------------------------------------
+        # تحديد أماكن الرقم في النص
+        # -------------------------------------------------
+
+        positions = [
+            m.start()
+            for m in re.finditer(
+                re.escape(number),
+                spoken_text
+            )
+        ]
+
+        for position in positions:
+
+            # الكلام قبل الرقم
+            before_start = max(
+                0,
+                position - 100
+            )
+
+            before = spoken_text[
+                before_start:position
+            ]
+
+            # -------------------------------------------------
+            # تحويل أسماء الحروف
+            # -------------------------------------------------
+
+            spoken_letters = (
+                convert_spoken_letters(
+                    before
+                )
+            )
+
+            # -------------------------------------------------
+            # إذا Google كتب الحروف مباشرة
+            # -------------------------------------------------
+
+            direct_letters = "".join(
+                re.findall(
+                    r"[^\W\d_]",
+                    before,
+                    flags=re.UNICODE
+                )
+            )
+
+            # -------------------------------------------------
+            # آخر 3 حروف
+            # -------------------------------------------------
+
+            letter_candidates = []
+
+            if len(spoken_letters) >= 3:
+
+                letter_candidates.append(
+                    spoken_letters[-3:]
+                )
+
+            if len(direct_letters) >= 3:
+
+                letter_candidates.append(
+                    direct_letters[-3:]
+                )
+
+            # إزالة التكرار
+            letter_candidates = list(
+                dict.fromkeys(
+                    letter_candidates
+                )
+            )
+
+            # -------------------------------------------------
+            # أولًا: مطابقة مباشرة مع Excel
+            # -------------------------------------------------
+
+            found_excel = False
+
+            for candidate in possible_excel:
+
+                for letters in letter_candidates:
+
+                    if (
+                        letters
+                        == candidate["letters"]
+                    ):
+
+                        if (
+                            candidate["original"]
+                            not in results
+                        ):
+
+                            results.append(
+                                candidate["original"]
+                            )
+
+                        found_excel = True
+
+                        break
+
+                if found_excel:
+                    break
+
+            if found_excel:
+                continue
+
+            # -------------------------------------------------
+            # لو اللوحة غير موجودة في Excel
+            # نحتاج استخراجها من الكلام نفسه
+            # -------------------------------------------------
+
+            # نبحث عن صيغة:
+            # 3 حروف + الرقم
+            # -------------------------------------------------
+
+            # نأخذ آخر 3 حروف معروفة
+            if letter_candidates:
+
+                letters = (
+                    letter_candidates[-1]
+                )
+
+                if len(letters) == 3:
+
+                    candidate_plate = (
+                        letters
+                        + number
+                    )
+
+                    # لا نضيف إلا لوحة صحيحة
+                    if (
+                        len(candidate_plate) == 7
+                    ):
+
+                        if (
+                            candidate_plate
+                            not in results
+                        ):
+
+                            results.append(
+                                candidate_plate
+                            )
+
+    return results
+
+
+# =========================================================
+# البحث في Excel بالضبط
+# =========================================================
+
+def is_plate_in_excel(
+    plate,
+    plates
+):
+
+    normalized = normalize_plate(
+        plate
+    )
+
+    for excel_plate in plates:
+
+        if (
+            normalize_plate(
+                excel_plate
+            )
+            == normalized
+        ):
 
             return True
 
@@ -502,78 +892,98 @@ def plate_exists(
 
 
 # =========================================================
-# معالجة التسجيل
+# عرض النتائج
 # =========================================================
 
-def process_audio(
-    audio_bytes,
-    excel_plates
+def display_results(
+    spoken_text,
+    plates
 ):
 
-    if not excel_plates:
-
-        st.warning(
-            "⚠️ ارفعي ملف Excel أولاً."
-        )
-
-        return
-
-    with st.spinner(
-        "🎙️ جاري التعرف على التسجيل..."
-    ):
-
-        spoken_text = audio_to_text(
-            audio_bytes
-        )
-
-    if not spoken_text:
-
-        st.error(
-            "❌ لم أستطع فهم التسجيل."
-        )
-
-        return
-
-    spoken_plates = (
-        extract_spoken_plates(
-            spoken_text
-        )
+    matches = find_spoken_plates(
+        spoken_text,
+        plates
     )
 
-    results = []
+    st.divider()
 
-    for plate in spoken_plates:
+    st.header("📋 النتيجة")
 
-        exists = plate_exists(
+    if not matches:
+
+        st.error(
+            "❌ لم يتم التعرف على أي لوحة."
+        )
+
+        return
+
+    st.success(
+        f"✅ تم التعرف على {len(matches)} لوحة."
+    )
+
+    # -----------------------------------------------------
+    # عرض كل لوحة في سطر
+    # -----------------------------------------------------
+
+    for plate in matches:
+
+        exists = is_plate_in_excel(
             plate,
-            excel_plates
+            plates
         )
 
-        results.append(
-            {
-                "plate": plate,
-                "exists": exists
-            }
-        )
+        if exists:
 
-    st.session_state.results = results
+            st.markdown(
+                f"""
+                <div style="
+                    color:#ff3333;
+                    font-size:32px;
+                    font-weight:bold;
+                    padding:10px 5px;
+                    direction:rtl;
+                    text-align:right;
+                ">
+                    🚗 {plate}
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+        else:
+
+            st.markdown(
+                f"""
+                <div style="
+                    color:white;
+                    font-size:32px;
+                    font-weight:bold;
+                    padding:10px 5px;
+                    direction:rtl;
+                    text-align:right;
+                ">
+                    🚗 {plate}
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
 
 # =========================================================
-# رفع Excel
+# رفع ملف Excel
 # =========================================================
 
 st.divider()
 
-st.header("📁 ملف اللوحات")
-
 uploaded_file = st.file_uploader(
     "📁 ارفعي ملف اللوحات",
-    type=["xlsx", "xls"],
-    key="excel_upload"
+    type=[
+        "xlsx",
+        "xls"
+    ]
 )
 
-excel_plates = []
+plates = []
 
 if uploaded_file is not None:
 
@@ -583,8 +993,11 @@ if uploaded_file is not None:
             uploaded_file
         )
 
-        # البحث عن اسم العمود
         plate_column = None
+
+        # -------------------------------------------------
+        # البحث عن عمود اللوحات
+        # -------------------------------------------------
 
         for column in df.columns:
 
@@ -596,23 +1009,47 @@ if uploaded_file is not None:
                 "اللوحه",
                 "اللوحة",
                 "لوحه",
-                "لوحة",
-                "plate",
-                "Plate"
+                "لوحة"
             ]:
 
                 plate_column = column
                 break
 
+        # -------------------------------------------------
+        # بحث أوسع
+        # -------------------------------------------------
+
+        if plate_column is None:
+
+            for column in df.columns:
+
+                column_name = (
+                    str(column)
+                    .strip()
+                    .replace(
+                        " ",
+                        ""
+                    )
+                )
+
+                if "لوح" in column_name:
+
+                    plate_column = column
+                    break
+
+        # -------------------------------------------------
+        # إذا لم يوجد العمود
+        # -------------------------------------------------
+
         if plate_column is None:
 
             st.error(
-                "❌ لم يتم العثور على عمود «اللوحه» أو «اللوحة» في ملف Excel."
+                "❌ لم يتم العثور على عمود اللوحات في ملف Excel."
             )
 
         else:
 
-            raw_plates = (
+            plates = (
                 df[plate_column]
                 .dropna()
                 .astype(str)
@@ -620,18 +1057,42 @@ if uploaded_file is not None:
                 .tolist()
             )
 
-            excel_plates = prepare_excel_plates(
-                raw_plates
-            )
+            # -------------------------------------------------
+            # الاحتفاظ فقط باللوحات التي:
+            # 3 حروف + 4 أرقام
+            # -------------------------------------------------
+
+            valid_plates = []
+
+            for plate in plates:
+
+                letters, numbers = (
+                    get_plate_parts(
+                        plate
+                    )
+                )
+
+                if (
+                    letters
+                    and numbers
+                    and len(letters) == 3
+                    and len(numbers) == 4
+                ):
+
+                    valid_plates.append(
+                        plate
+                    )
+
+            plates = valid_plates
 
             st.success(
-                f"✅ تم تحميل {len(raw_plates)} لوحة بنجاح."
+                f"✅ تم تحميل {len(plates)} لوحة بنجاح."
             )
 
     except Exception as e:
 
         st.error(
-            f"❌ حدث خطأ أثناء قراءة ملف Excel: {e}"
+            f"❌ حدث خطأ أثناء قراءة Excel: {e}"
         )
 
 
@@ -652,7 +1113,7 @@ tab1, tab2 = st.tabs(
 
 
 # =========================================================
-# تسجيل مباشر
+# التسجيل من التطبيق
 # =========================================================
 
 with tab1:
@@ -668,33 +1129,60 @@ with tab1:
         use_container_width=True,
 
         key="recorder"
+
     )
 
     if audio_recorded is not None:
 
-        audio_bytes = (
-            audio_recorded["bytes"]
-        )
+        if not plates:
 
-        process_audio(
-            audio_bytes,
-            excel_plates
-        )
+            st.warning(
+                "⚠️ ارفعي ملف Excel أولًا."
+            )
+
+        else:
+
+            audio_bytes = (
+                audio_recorded["bytes"]
+            )
+
+            with st.spinner(
+                "🎙️ جاري تحليل التسجيل واستخراج جميع اللوحات..."
+            ):
+
+                spoken_text = (
+                    audio_to_text_long(
+                        audio_bytes
+                    )
+                )
+
+            if spoken_text:
+
+                st.session_state[
+                    "spoken_text"
+                ] = spoken_text
+
+                display_results(
+                    spoken_text,
+                    plates
+                )
+
+            else:
+
+                st.error(
+                    "❌ لم يتم التعرف على الكلام في التسجيل."
+                )
 
 
 # =========================================================
-# رفع أي ملف صوتي من الهاتف
+# رفع تسجيل من الجوال
 # =========================================================
 
 with tab2:
 
-    st.write(
-        "📁 اختاري أي ملف صوتي من ملفات الهاتف:"
-    )
-
     uploaded_audio = st.file_uploader(
 
-        "🎵 اختيار ملف صوتي",
+        "📁 اختاري أي ملف صوتي من ملفات الهاتف",
 
         type=[
             "wav",
@@ -707,114 +1195,46 @@ with tab2:
         ],
 
         key="audio_upload"
+
     )
 
     if uploaded_audio is not None:
 
-        audio_bytes = (
-            uploaded_audio.getvalue()
-        )
+        if not plates:
 
-        process_audio(
-            audio_bytes,
-            excel_plates
-        )
-
-
-# =========================================================
-# النتيجة
-# =========================================================
-
-st.divider()
-
-st.header("📋 النتيجة")
-
-if "results" not in st.session_state:
-
-    st.session_state.results = []
-
-
-if st.session_state.results:
-
-    st.success(
-        f"✅ تم التعرف على {len(st.session_state.results)} لوحة."
-    )
-
-    for result in st.session_state.results:
-
-        plate = result["plate"]
-        exists = result["exists"]
-
-        if exists:
-
-            st.markdown(
-                f"""
-                <div style="
-                    background:#4a1820;
-                    border:2px solid #ff4b4b;
-                    border-radius:14px;
-                    padding:18px;
-                    margin:12px 0;
-                    text-align:center;
-                ">
-
-                    <div style="
-                        color:#ff4b4b;
-                        font-size:32px;
-                        font-weight:bold;
-                    ">
-                        🚗 {plate}
-                    </div>
-
-                    <div style="
-                        color:#ff6b6b;
-                        font-size:20px;
-                        margin-top:8px;
-                    ">
-                        🔴 موجودة في الملف
-                    </div>
-
-                </div>
-                """,
-                unsafe_allow_html=True
+            st.warning(
+                "⚠️ ارفعي ملف Excel أولًا."
             )
 
         else:
 
-            st.markdown(
-                f"""
-                <div style="
-                    background:#202126;
-                    border:1px solid #555;
-                    border-radius:14px;
-                    padding:18px;
-                    margin:12px 0;
-                    text-align:center;
-                ">
-
-                    <div style="
-                        color:white;
-                        font-size:32px;
-                        font-weight:bold;
-                    ">
-                        🚗 {plate}
-                    </div>
-
-                    <div style="
-                        color:#aaaaaa;
-                        font-size:20px;
-                        margin-top:8px;
-                    ">
-                        ⚪ غير موجودة في الملف
-                    </div>
-
-                </div>
-                """,
-                unsafe_allow_html=True
+            audio_bytes = (
+                uploaded_audio.read()
             )
 
-else:
+            with st.spinner(
+                "🎙️ جاري تحليل التسجيل واستخراج جميع اللوحات..."
+            ):
 
-    st.info(
-        "🎙️ سجلي أو ارفعي تسجيلًا للبحث عن اللوحات."
-    )
+                spoken_text = (
+                    audio_to_text_long(
+                        audio_bytes
+                    )
+                )
+
+            if spoken_text:
+
+                st.session_state[
+                    "spoken_text"
+                ] = spoken_text
+
+                display_results(
+                    spoken_text,
+                    plates
+                )
+
+            else:
+
+                st.error(
+                    "❌ لم يتم التعرف على الكلام في التسجيل."
+                )
