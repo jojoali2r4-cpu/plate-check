@@ -163,39 +163,33 @@ def audio_to_text(audio_bytes):
 # البحث عن اللوحات
 # =========================
 def find_matching_plates(spoken_text, plates):
-
     if not spoken_text or not plates:
         return []
 
-    # تحويل الأرقام العربية إلى إنجليزية
-    spoken_text = normalize_numbers(spoken_text)
+    spoken_text = normalize_numbers(str(spoken_text))
 
-    # نجمع كل الأرقام التي فهمها الصوت
-    # مثال:
-    # "رمق 72 60 رسح 28 52 رند 72 24"
-    # تصبح:
-    # "726028527224"
-    spoken_digits = "".join(
-        re.findall(r"\d", spoken_text)
+    # استخراج: حروف عربية + 4 أرقام
+    spoken_plates = re.findall(
+        r'([ء-ي]+)\s*(\d{4})',
+        spoken_text
     )
+
+    # تحويلها لشكل موحد بدون مسافات
+    spoken_plates = [
+        letters + numbers
+        for letters, numbers in spoken_plates
+    ]
 
     matches = []
 
     for plate in plates:
-
         plate_text = normalize_numbers(str(plate))
 
-        # أرقام اللوحة فقط
-        plate_digits = "".join(
-            re.findall(r"\d", plate_text)
-        )
+        # إزالة المسافات فقط للمقارنة
+        clean_plate = re.sub(r'\s+', '', plate_text)
 
-        if not plate_digits:
-            continue
-
-        # نطابق رقم اللوحة كاملًا
-        if plate_digits in spoken_digits:
-
+        # المطابقة لازم تكون كاملة
+        if clean_plate in spoken_plates:
             matches.append(plate)
 
     return list(dict.fromkeys(matches))
