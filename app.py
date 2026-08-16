@@ -6,12 +6,28 @@ def audio_to_text(audio_bytes):
     recognizer = sr.Recognizer()
 
     try:
-        with open("temp_audio.wav", "wb") as f:
-            f.write(audio_bytes)
+        from pydub import AudioSegment
+        from io import BytesIO
 
-        with sr.AudioFile("temp_audio.wav") as source:
+        # تحويل الصوت القادم من الميكروفون إلى WAV
+        audio_segment = AudioSegment.from_file(
+            BytesIO(audio_bytes)
+        )
+
+        wav_buffer = BytesIO()
+
+        audio_segment.export(
+            wav_buffer,
+            format="wav"
+        )
+
+        wav_buffer.seek(0)
+
+        # قراءة WAV
+        with sr.AudioFile(wav_buffer) as source:
             audio = recognizer.record(source)
 
+        # تحويل الصوت إلى نص عربي
         text = recognizer.recognize_google(
             audio,
             language="ar-SA"
@@ -20,13 +36,11 @@ def audio_to_text(audio_bytes):
         return text
 
     except sr.UnknownValueError:
-        st.warning("لم أستطع فهم الصوت. جربي نطق اللوحة بوضوح.")
-
+        st.warning("لم أستطع فهم الكلام. جربي نطق رقم اللوحة بوضوح.")
         return ""
 
     except Exception as e:
         st.error(f"خطأ في تحويل الصوت إلى نص: {e}")
-
         return ""
 
     try:
