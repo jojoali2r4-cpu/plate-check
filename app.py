@@ -1,63 +1,17 @@
 import streamlit as st
 import pandas as pd
-from streamlit_mic_recorder import mic_recorder
 import speech_recognition as sr
-def audio_to_text(audio_bytes):
-    recognizer = sr.Recognizer()
+import re
+import io
 
-    try:
-        from pydub import AudioSegment
-        from io import BytesIO
+from streamlit_mic_recorder import mic_recorder
+from pydub import AudioSegment
+from rapidfuzz import fuzz
 
-        # تحويل الصوت القادم من الميكروفون إلى WAV
-        audio_segment = AudioSegment.from_file(
-            BytesIO(audio_bytes)
-        )
 
-        wav_buffer = BytesIO()
-
-        audio_segment.export(
-            wav_buffer,
-            format="wav"
-        )
-
-        wav_buffer.seek(0)
-
-        # قراءة WAV
-        with sr.AudioFile(wav_buffer) as source:
-            audio = recognizer.record(source)
-
-        # تحويل الصوت إلى نص عربي
-        text = recognizer.recognize_google(
-            audio,
-            language="ar-SA"
-        )
-
-        return text
-
-    except sr.UnknownValueError:
-        st.warning("لم أستطع فهم الكلام. جربي نطق رقم اللوحة بوضوح.")
-        return ""
-
-    except Exception as e:
-        st.error(f"خطأ في تحويل الصوت إلى نص: {e}")
-        return ""
-
-    try:
-        with open("temp_audio.wav", "wb") as f:
-            f.write(audio_bytes)
-
-        with sr.AudioFile("temp_audio.wav") as source:
-            audio = recognizer.record(source)
-
-        text = recognizer.recognize_google(audio, language="ar-SA")
-        return text
-
-    except sr.UnknownValueError:
-        return ""
-
-    except Exception:
-        return ""
+# =========================
+# إعداد الصفحة
+# =========================
 
 st.set_page_config(
     page_title="نظام فحص لوحات السيارات",
@@ -66,7 +20,7 @@ st.set_page_config(
 )
 
 st.title("🚗 نظام فحص لوحات السيارات")
-st.write("ارفعي ملف اللوحات ثم ابدئي التسجيل الصوتي.")
+
 
 # =========================
 # رفع ملف Excel
@@ -80,20 +34,23 @@ uploaded_file = st.file_uploader(
 plates = []
 
 if uploaded_file is not None:
+
     try:
-        df = pd.read_excel(
-            uploaded_file
-        )
+        df = pd.read_excel(uploaded_file)
 
         if "اللوحه" not in df.columns:
-            st.error("لم يتم العثور على عمود «اللوحه» في الملف.")
+
+            st.error(
+                "لم يتم العثور على عمود «اللوحه» في ملف Excel."
+            )
 
         else:
+
             plates = (
                 df["اللوحه"]
                 .dropna()
                 .astype(str)
-                .str.replace(" ", "", regex=False)
+                .str.strip()
                 .tolist()
             )
 
@@ -102,76 +59,266 @@ if uploaded_file is not None:
             )
 
     except Exception as e:
-        st.error(f"حدث خطأ أثناء قراءة الملف: {e}")
 
+        st.error(
+            f"حدث خطأ أثناء قراءة ملف Excel: {e}"
+        )
+
+
+# =========================
+# تحويل الأرقام العربية
+# =========================
+
+def normalize_numbers(text):
+
+    arabic_numbers = "٠١٢٣٤٥٦٧٨٩"
+    english_numbers = "0123456789"
+
+    table = str.maketrans(
+        arabic_numbers,
+        english_numbers
+    )
+
+    return text.translate(table)
+
+
+# =========================
+# تنظيف النص
+# =========================
+
+def clean_text(text):
+
+    text = normalize_numbers(text)
+
+    text = text.lower()
+
+    text = re.sub(
+        r"[\s\-_,.!؟،]+",
+        "",
+        text
+    )
+
+    return text
+
+
+# =========================
+# تحويل الصوت إلى WAV
+# =========================
+
+def convert_to_wav(audio_bytes):
+
+    audio = AudioSegment.from_file(
+        io.BytesIO(audio_bytes)
+    )
+
+    wav_buffer = io.BytesIO()
+
+    audio.export(
+        wav_buffer,
+        format="wav"
+    )
+
+    wav_buffer.seek(0)
+
+    return wav_buffer
+
+
+# =========================
+# تحويل الصوت إلى نص
+# =========================
+
+def audio_to_text(audio_bytes):
+
+    recognizer = sr.Recognizer()
+
+    try:
+
+        wav_file = convert_to_wav(audio_bytes)
+
+        with sr.AudioFile(wav_file) as source:
+
+            audio_data = recognizer.record(source)
+
+        text = recognizer.recognize_google(
+            audio_data,
+            language="ar-SA"
+        )
+
+        return text
+
+    except sr.UnknownValueError:
+
+        return ""
+
+    except Exception as e:
+
+        st.error(
+            f"حدث خطأ أثناء تحويل الصوت إلى نص: {e}"
+        )
+
+        return ""
+
+
+# =========================
+# البحث عن اللوحات
+# =========================
+
+def find_matching_plates(spoken_text, plates):
+
+    if not spoken_text or not plates:
+        return []
+
+    clean_spoken = clean_text(spoken_text)
+
+    matches = []
+
+    for plate in plates:
+
+        clean_plate = clean_text(plate)
+
+        # تطابق مباشر
+        if clean_plate in clean_spoken:
+
+            matches.append(plate)
+
+            continue
+
+        # مطابقة تقريبية
+        score = fuzz.partial_ratio(
+            clean_plate,
+            clean_spoken
+        )
+
+        if score >= 80:
+
+            matches.append(plate)
+
+    # إزالة التكرار
+    return list(dict.fromkeys(matches))
+
+
+# =========================
+# واجهة التسجيل
+# =========================
 
 st.divider()
 
+st.header("🎙️ مصدر التسجيل")
 
-# =========================
-# التسجيل الصوتي
-# =========================
-
-st.subheader("🎙️ التسجيل الصوتي")
-audio = mic_recorder(
-    start_prompt="🎙️ بدء التسجيل",
-    stop_prompt="⏹️ إيقاف التسجيل",
-    just_once=True,
-    use_container_width=True,
-    key="car_plate_recorder",
+tab1, tab2 = st.tabs(
+    [
+        "🎙️ تسجيل من التطبيق",
+        "📁 رفع تسجيل جاهز"
+    ]
 )
 
 
+# =========================
+# تسجيل من التطبيق
+# =========================
+
+with tab1:
+
+    audio_recorded = mic_recorder(
+
+        start_prompt="🎙️ بدء التسجيل",
+
+        stop_prompt="⏹️ إيقاف التسجيل",
+
+        just_once=True,
+
+        use_container_width=True,
+
+        key="recorder"
+
+    )
+
+    if audio_recorded is not None:
+
+        audio_bytes = audio_recorded["bytes"]
+
+        if plates:
+
+            spoken_text = audio_to_text(
+                audio_bytes
+            )
+
+            matches = find_matching_plates(
+                spoken_text,
+                plates
+            )
+
+            st.session_state.matches = matches
+
 
 # =========================
-# بعد انتهاء التسجيل
+# رفع تسجيل جاهز
 # =========================
 
-if audio is not None:
+with tab2:
 
-    audio_bytes = audio["bytes"]
+    uploaded_audio = st.file_uploader(
 
-    # تحويل التسجيل الصوتي إلى نص
-    spoken_text = audio_to_text(audio_bytes)
-    st.write("النص الذي تم التعرف عليه:", spoken_text)
+        "🎵 اختاري تسجيلًا من الهاتف",
 
-    # البحث عن لوحة مطابقة
-    if spoken_text and plates:
+        type=[
+            "wav",
+            "mp3",
+            "m4a",
+            "ogg",
+            "webm"
+        ],
 
-        from rapidfuzz import process, fuzz
+        key="audio_upload"
 
-        result = process.extractOne(
-            spoken_text,
-            plates,
-            scorer=fuzz.ratio
-        )
+    )
 
-        if result and result[1] >= 65:
-            matched_plate = result[0]
+    if uploaded_audio is not None:
 
-            st.session_state.matches = [matched_plate]
+        if plates:
 
-        else:
-            st.session_state.matches = []
+            audio_bytes = uploaded_audio.read()
 
-    else:
-        st.session_state.matches = []
+            spoken_text = audio_to_text(
+                audio_bytes
+            )
 
+            matches = find_matching_plates(
+                spoken_text,
+                plates
+            )
+
+            st.session_state.matches = matches
+
+
+# =========================
+# عرض النتائج
+# =========================
 
 st.divider()
 
+st.header("📋 اللوحات المتطابقة")
 
-# =========================
-# نتائج المطابقة
-# =========================
-
-st.subheader("📋 اللوحات المتطابقة")
 
 if "matches" not in st.session_state:
+
     st.session_state.matches = []
 
+
 if st.session_state.matches:
-    st.table(st.session_state.matches)
+
+    st.success(
+        f"تم العثور على {len(st.session_state.matches)} لوحة مطابقة."
+    )
+
+    for plate in st.session_state.matches:
+
+        st.write(
+            f"🚨 **{plate}**"
+        )
 
 else:
-    st.info("لا توجد مطابقات حتى الآن.")
+
+    st.info(
+        "لا توجد مطابقات حتى الآن."
+    )
