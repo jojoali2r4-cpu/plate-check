@@ -167,45 +167,36 @@ def find_matching_plates(spoken_text, plates):
     if not spoken_text or not plates:
         return []
 
-    clean_spoken = clean_text(spoken_text)
+    # تحويل الأرقام العربية إلى إنجليزية
+    spoken_text = normalize_numbers(spoken_text)
+
+    # نجمع كل الأرقام التي فهمها الصوت
+    # مثال:
+    # "رمق 72 60 رسح 28 52 رند 72 24"
+    # تصبح:
+    # "726028527224"
+    spoken_digits = "".join(
+        re.findall(r"\d", spoken_text)
+    )
 
     matches = []
 
-    # أولًا: نحاول نطابق اللوحة كاملة
     for plate in plates:
 
-        clean_plate = clean_text(plate)
+        plate_text = normalize_numbers(str(plate))
 
-        if clean_plate in clean_spoken:
-            matches.append(plate)
-
-    # ثانيًا: لو ما حصل تطابق كامل،
-    # نستخدم الرقم الموجود في اللوحة كجزء قوي من المطابقة
-    spoken_numbers = re.findall(
-        r"\d{2,6}",
-        clean_spoken
-    )
-
-    for plate in plates:
-
-        clean_plate = clean_text(plate)
-
-        plate_numbers = re.findall(
-            r"\d{2,6}",
-            clean_plate
+        # أرقام اللوحة فقط
+        plate_digits = "".join(
+            re.findall(r"\d", plate_text)
         )
 
-        if not plate_numbers:
+        if not plate_digits:
             continue
 
-        for number in plate_numbers:
+        # نطابق رقم اللوحة كاملًا
+        if plate_digits in spoken_digits:
 
-            if number in spoken_numbers:
-
-                # نضيف اللوحة إذا كانت أرقامها موجودة
-                # في الكلام حتى لو الحروف اتعرفت بشكل مختلف
-                if plate not in matches:
-                    matches.append(plate)
+            matches.append(plate)
 
     return list(dict.fromkeys(matches))
 
