@@ -1,4 +1,4 @@
-import streamlit as st
+٧import streamlit as st
 import pandas as pd
 from streamlit_mic_recorder import mic_recorder
 import speech_recognition as sr
@@ -95,6 +95,7 @@ if audio is not None:
 
     # تحويل التسجيل الصوتي إلى نص
     spoken_text = audio_to_text(audio_bytes)
+    st.write("النص الذي تم التعرف عليه:", spoken_text)
 
     # البحث عن لوحة مطابقة
     if spoken_text and plates:
