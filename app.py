@@ -12,6 +12,30 @@ def audio_to_text(audio_bytes):
         with sr.AudioFile("temp_audio.wav") as source:
             audio = recognizer.record(source)
 
+        text = recognizer.recognize_google(
+            audio,
+            language="ar-SA"
+        )
+
+        return text
+
+    except sr.UnknownValueError:
+        st.warning("لم أستطع فهم الصوت. جربي نطق اللوحة بوضوح.")
+
+        return ""
+
+    except Exception as e:
+        st.error(f"خطأ في تحويل الصوت إلى نص: {e}")
+
+        return ""
+
+    try:
+        with open("temp_audio.wav", "wb") as f:
+            f.write(audio_bytes)
+
+        with sr.AudioFile("temp_audio.wav") as source:
+            audio = recognizer.record(source)
+
         text = recognizer.recognize_google(audio, language="ar-SA")
         return text
 
