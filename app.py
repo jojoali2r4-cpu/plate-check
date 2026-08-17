@@ -58,10 +58,14 @@ def normalize_arabic_letters(text):
         "إ": "ا",
         "آ": "ا",
         "ٱ": "ا",
+
         "ى": "ي",
+
         "ؤ": "و",
         "ئ": "ي",
+
         "ة": "ه",
+
         "ـ": "",
     }
 
@@ -85,6 +89,7 @@ def clean_text(text):
     text = normalize_numbers(text)
     text = normalize_arabic_letters(text)
 
+    # إزالة كل شيء غير عربي أو رقم
     text = re.sub(
         r"[^0-9\u0600-\u06FF]",
         "",
@@ -95,7 +100,7 @@ def clean_text(text):
 
 
 # =========================================================
-# تحويل أسماء الحروف العربية
+# تحويل أسماء الحروف العربية التي قد يفهمها Google
 # =========================================================
 
 LETTER_NAMES = {
@@ -112,6 +117,7 @@ LETTER_NAMES = {
     "ثا": "ث",
 
     "جيم": "ج",
+    "جيم": "ج",
 
     "حاء": "ح",
     "حا": "ح",
@@ -119,6 +125,7 @@ LETTER_NAMES = {
     "خاء": "خ",
     "خا": "خ",
 
+    "دال": "د",
     "دال": "د",
 
     "ذال": "ذ",
@@ -128,9 +135,12 @@ LETTER_NAMES = {
     "را": "ر",
 
     "زاي": "ز",
+    "زاي": "ز",
 
     "سين": "س",
+    "سين": "س",
 
+    "شين": "ش",
     "شين": "ش",
 
     "صاد": "ص",
@@ -146,25 +156,33 @@ LETTER_NAMES = {
     "ظا": "ظ",
 
     "عين": "ع",
+    "عين": "ع",
 
+    "غين": "غ",
     "غين": "غ",
 
     "فاء": "ف",
     "فا": "ف",
 
     "قاف": "ق",
+    "قاف": "ق",
 
+    "كاف": "ك",
     "كاف": "ك",
 
     "لام": "ل",
+    "لام": "ل",
 
     "ميم": "م",
+    "ميم": "م",
 
+    "نون": "ن",
     "نون": "ن",
 
     "هاء": "ه",
     "ها": "ه",
 
+    "واو": "و",
     "واو": "و",
 
     "ياء": "ي",
@@ -185,6 +203,7 @@ def convert_letter_names(text):
 
     result = str(text)
 
+    # الأطول أولاً حتى لا يحصل استبدال خاطئ
     names = sorted(
         LETTER_NAMES.keys(),
         key=len,
@@ -207,6 +226,9 @@ def convert_letter_names(text):
 # =========================================================
 
 def extract_digits(text):
+    """
+    استخراج الأرقام من النص.
+    """
 
     text = normalize_numbers(text)
 
@@ -220,6 +242,13 @@ def extract_digits(text):
 # =========================================================
 
 def plate_information(plate):
+    """
+    يرجع:
+    - اللوحة الأصلية
+    - الحروف
+    - الأرقام
+    - النص المنظف
+    """
 
     original = str(plate).strip()
 
@@ -250,9 +279,11 @@ def plate_information(plate):
 
 def find_plate_column(df):
 
+    # أولاً الاسم المطلوب بالضبط
     if "اللوحه" in df.columns:
         return "اللوحه"
 
+    # احتمالات أخرى
     possible_names = [
         "اللوحة",
         "لوحه",
@@ -268,6 +299,7 @@ def find_plate_column(df):
         if name in df.columns:
             return name
 
+    # محاولة اكتشاف أي عمود يحتوي كلمة لوحة
     for column in df.columns:
 
         column_text = str(column).strip()
@@ -288,7 +320,9 @@ uploaded_file = st.file_uploader(
     key="excel_file"
 )
 
+
 plates = []
+
 
 if uploaded_file is not None:
 
@@ -342,7 +376,7 @@ if uploaded_file is not None:
 
 
 # =========================================================
-# تحويل الصوت إلى WAV
+# تحويل الصوت إلى WAV خفيف
 # =========================================================
 
 def convert_to_wav(audio_bytes):
@@ -351,8 +385,10 @@ def convert_to_wav(audio_bytes):
         io.BytesIO(audio_bytes)
     )
 
+    # Mono
     audio = audio.set_channels(1)
 
+    # 16000 Hz مناسب للتعرف على الكلام
     audio = audio.set_frame_rate(16000)
 
     wav_buffer = io.BytesIO()
@@ -437,6 +473,10 @@ def plate_matches_spoken_text(
     if not plate_digits:
         return False
 
+    # -----------------------------------------------------
+    # تجهيز الكلام المنطوق
+    # -----------------------------------------------------
+
     spoken_text = normalize_numbers(
         spoken_text
     )
@@ -449,6 +489,11 @@ def plate_matches_spoken_text(
         spoken_text
     )
 
+    # -----------------------------------------------------
+    # شرط أساسي:
+    # أرقام اللوحة يجب أن تكون موجودة
+    # -----------------------------------------------------
+
     spoken_digits = extract_digits(
         spoken_normalized
     )
@@ -456,8 +501,23 @@ def plate_matches_spoken_text(
     if plate_digits not in spoken_digits:
         return False
 
+    # -----------------------------------------------------
+    # إذا كانت اللوحة بالكامل موجودة في الكلام
+    # فهذا أفضل تطابق ممكن
+    # -----------------------------------------------------
+
     if info["normalized"] in spoken_normalized:
         return True
+
+    # -----------------------------------------------------
+    # البحث حول أرقام اللوحة
+    #
+    # مثال:
+    # الكلام:
+    # "رسق 2434"
+    #
+    # نأخذ الجزء القريب من 2434
+    # -----------------------------------------------------
 
     digit_pattern = r"[\s\-_]*".join(
         re.escape(d)
@@ -490,6 +550,10 @@ def plate_matches_spoken_text(
         local_text
     )
 
+    # -----------------------------------------------------
+    # استخراج الحروف الموجودة بالقرب من الرقم
+    # -----------------------------------------------------
+
     local_letters = "".join(
         re.findall(
             r"[\u0600-\u06FF]",
@@ -497,11 +561,23 @@ def plate_matches_spoken_text(
         )
     )
 
+    # لا توجد حروف في اللوحة
     if not plate_letters:
         return True
 
+    # -----------------------------------------------------
+    # التطابق المباشر
+    # -----------------------------------------------------
+
     if plate_letters in local_letters:
         return True
+
+    # -----------------------------------------------------
+    # محاولة معالجة حالة:
+    # ر ص ق 2434
+    # بدلاً من:
+    # رسق 2434
+    # -----------------------------------------------------
 
     compact_letters = local_letters.replace(
         " ",
@@ -511,15 +587,19 @@ def plate_matches_spoken_text(
     if plate_letters in compact_letters:
         return True
 
+    # -----------------------------------------------------
+    # مطابقة مرنة للحروف فقط
+    #
+    # لا نستخدمها إلا إذا كانت الأرقام صحيحة
+    # -----------------------------------------------------
+
     if len(plate_letters) >= 2:
 
+        # البحث عن تسلسل حروف قريب من طول لوحة الحروف
         n = len(plate_letters)
 
         for i in range(
-            max(
-                1,
-                len(compact_letters) - n + 1
-            )
+            max(1, len(compact_letters) - n + 1)
         ):
 
             part = compact_letters[
@@ -539,6 +619,7 @@ def plate_matches_spoken_text(
 
             score = same / n
 
+            # تطابق قوي جداً للحروف
             if score >= 0.80:
                 return True
 
@@ -546,7 +627,7 @@ def plate_matches_spoken_text(
 
 
 # =========================================================
-# البحث عن اللوحات الموجودة
+# البحث عن اللوحات الموجودة فقط
 # =========================================================
 
 def find_matching_plates(
@@ -559,6 +640,8 @@ def find_matching_plates(
 
     matches = []
 
+    # نمر على اللوحات الموجودة في Excel
+    # ونرجع اللوحة الأصلية نفسها
     for plate in plates:
 
         try:
@@ -575,6 +658,7 @@ def find_matching_plates(
         except Exception:
             continue
 
+    # إزالة التكرار
     unique_matches = []
 
     for plate in matches:
@@ -588,20 +672,6 @@ def find_matching_plates(
 
 
 # =========================================================
-# تهيئة النتائج
-# =========================================================
-
-if "spoken_results" not in st.session_state:
-    st.session_state.spoken_results = []
-
-if "processed_audio_id" not in st.session_state:
-    st.session_state.processed_audio_id = None
-
-if "last_recorded_id" not in st.session_state:
-    st.session_state.last_recorded_id = None
-
-
-# =========================================================
 # واجهة التسجيل
 # =========================================================
 
@@ -610,6 +680,7 @@ st.divider()
 st.header(
     "🎙️ مصدر التسجيل"
 )
+
 
 tab1, tab2 = st.tabs(
     [
@@ -653,42 +724,32 @@ with tab1:
                 "bytes"
             ]
 
-            current_record_id = (
-                len(audio_bytes),
-                audio_bytes[:50],
-                audio_bytes[-50:]
-            )
-
-            if (
-                st.session_state.last_recorded_id
-                != current_record_id
+            with st.spinner(
+                "🎙️ جاري تحليل التسجيل..."
             ):
 
-                st.session_state.last_recorded_id = (
-                    current_record_id
+                spoken_text = audio_to_text(
+                    audio_bytes
                 )
 
-                with st.spinner(
-                    "🎙️ جاري تحليل التسجيل..."
-                ):
+            if spoken_text:
 
-                    spoken_text = audio_to_text(
-                        audio_bytes
-                    )
+                matches = find_matching_plates(
+                    spoken_text,
+                    plates
+                )
 
-                if spoken_text:
+                st.session_state.matches = (
+                    matches
+                )
 
-                    matches = find_matching_plates(
-                        spoken_text,
-                        plates
-                    )
+                st.session_state.spoken_text = (
+                    spoken_text
+                )
 
-                    st.session_state.spoken_results.append(
-                        {
-                            "text": spoken_text,
-                            "matches": matches
-                        }
-                    )
+            else:
+
+                st.session_state.matches = []
 
 
 # =========================================================
@@ -725,6 +786,7 @@ with tab2:
 
         else:
 
+            # معرف بسيط لمنع إعادة معالجة نفس الملف
             current_audio_id = (
                 uploaded_audio.name,
                 uploaded_audio.size
@@ -734,7 +796,9 @@ with tab2:
                 "processed_audio_id"
             ) != current_audio_id:
 
-                audio_bytes = uploaded_audio.read()
+                audio_bytes = (
+                    uploaded_audio.read()
+                )
 
                 st.session_state.processed_audio_id = (
                     current_audio_id
@@ -748,6 +812,10 @@ with tab2:
                         audio_bytes
                     )
 
+                st.session_state.spoken_text = (
+                    spoken_text
+                )
+
                 if spoken_text:
 
                     matches = find_matching_plates(
@@ -755,12 +823,27 @@ with tab2:
                         plates
                     )
 
-                    st.session_state.spoken_results.append(
-                        {
-                            "text": spoken_text,
-                            "matches": matches
-                        }
+                    st.session_state.matches = (
+                        matches
                     )
+
+                else:
+
+                    st.session_state.matches = []
+
+
+# =========================================================
+# تهيئة النتائج
+# =========================================================
+
+if "matches" not in st.session_state:
+
+    st.session_state.matches = []
+
+
+if "spoken_text" not in st.session_state:
+
+    st.session_state.spoken_text = ""
 
 
 # =========================================================
@@ -773,55 +856,34 @@ st.header(
     "📋 النتيجة"
 )
 
-if st.session_state.spoken_results:
 
-    for result in st.session_state.spoken_results:
+if st.session_state.matches:
 
-        spoken_text = result["text"]
-        matches = result["matches"]
+    st.success(
+        f"✅ تم العثور على "
+        f"{len(st.session_state.matches)} "
+        f"لوحة موجودة في الملف."
+    )
 
-        if matches:
+    # عرض اللوحات الموجودة فقط
+    # بدون أي خيارات أخرى
 
-            st.markdown(
-                f"""
-                <div style="
-                    background-color:#ff4b4b;
-                    color:white;
-                    padding:18px;
-                    border-radius:12px;
-                    margin-bottom:12px;
-                    font-size:22px;
-                    font-weight:bold;
-                    text-align:center;
-                ">
-                    🚗 {spoken_text}
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+    for plate in st.session_state.matches:
 
-        else:
-
-            st.markdown(
-                f"""
-                <div style="
-                    background-color:#f0f0f0;
-                    color:#111111;
-                    padding:18px;
-                    border-radius:12px;
-                    margin-bottom:12px;
-                    font-size:22px;
-                    font-weight:bold;
-                    text-align:center;
-                ">
-                    🚗 {spoken_text}
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+        st.success(
+            f"🚗 {plate} موجودة في الملف"
+        )
 
 else:
 
-    st.info(
-        "🎙️ سجلي أو ارفعي تسجيلًا للبحث عن اللوحة."
-    )
+    if st.session_state.spoken_text:
+
+        st.error(
+            "❌ اللوحة المنطوقة غير موجودة في الملف."
+        )
+
+    else:
+
+        st.info(
+            "🎙️ سجلي أو ارفعي تسجيلًا للبحث عن اللوحة."
+        )
